@@ -116,5 +116,31 @@ asks again instead of marking it wrong. After correcting those two: 71 of 71. A 
 pass. Honest limit: a set we wrote ourselves says little about real speech; phrases heard in consented field
 sessions go into a separate `field` file with their source marked.
 
+### Commit 7: talking to Samjho in the browser
+"Talk in the browser" runs the same Session by voice. The mic is captured with an AudioWorklet at 16 kHz and
+sent over one WebSocket (`/ws/browser`); Pipecat 1.17 runs Sarvam saaras:v4 speech-to-text in codemix mode,
+Silero voice activity detection, a turn end that waits 0.9 s when a number is expected and 0.6 s for yes or no,
+then our Brain processor (no LLM: it calls `Session.hear()`), then Sarvam bulbul:v4-flash speech in a Hindi or
+English (India) female voice. Every event goes to the UI as JSON on the same socket. Built by a parallel agent
+that checked each Pipecat class against the installed source, because names changed in 1.17.
+
+Measured, not estimated: a live script (`scripts/voice_smoke.py`) plays Sarvam-made Hindi answers into a local
+server over a real WebSocket. The wrong teach-back "50,000 हाथ में आएंगे" came back red. End of speech to first
+reply audio was about 1.05 s for yes or no turns and 1.3 to 1.37 s for number turns, of which 0.6 or 0.9 s is the
+deliberate wait for her to finish.
+
+Problems met and how they were handled:
+1. **Echo.** A plain WebSocket gets no browser echo cancellation, so laptop speakers would feed Samjho's voice back
+   in as the borrower. Chosen trade-off: half duplex. The browser sends silence while playing, the server blanks
+   mic audio while the bot speaks plus 0.25 s, and the user is muted in that window. Cost: she cannot interrupt in
+   the browser (planned for the phone, where the handset cancels echo).
+2. **The user was unmuted between lines of one reply.** Each line was a separate speech request, so the bot
+   "stopped speaking" between them and a stray word could cut the explanation. Fix: one utterance per reply. Cost:
+   the subtitles of a reply appear together.
+3. **A very short "हाँ" (0.28 s) did not trigger voice detection** in the synthetic test. To verify on a real mic.
+4. **Speech-to-text writes numbers as digits ("50,000")**; the parser already handled that.
+5. Notices such as "SARVAM_API_KEY not set" and "too many live sessions" showed only their code in the panel.
+   Fixed to show the explanation.
+
 ### In progress
-- Browser voice channel on Pipecat with Sarvam speech-to-text and text-to-speech, built in parallel by a subagent.
+- Real phone call channel (Twilio), once the paid account is set up.

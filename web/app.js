@@ -102,7 +102,9 @@ function handleEvent(ev) {
       break;
     }
     case "case":
-      note((CASE_TEXT[ev.case] || ev.case + ": ") + (ev.case === "CALLBACK" ? ev.detail : ""), "case");
+      if (ev.case === "HOLD_REVIEW") note(CASE_TEXT.HOLD_REVIEW, "case");
+      else if (ev.case === "CALLBACK") note(CASE_TEXT.CALLBACK + ev.detail, "case");
+      else note(ev.detail || ev.case, "case"); // KEY_NOT_SET, BUSY and other notices
       break;
     case "record":
       renderRecord(ev.record);
@@ -160,6 +162,16 @@ async function loadStatus() {
 }
 
 document.querySelector('.tile[data-mode="text"]').addEventListener("click", () => startText().catch((e) => note(e.message, "case")));
+
+// Browser voice (web/voice.js): the same events arrive over a WebSocket and go through handleEvent.
+function startBrowserVoice() {
+  resetPanel();
+  sessionId = null;
+  $("say").hidden = true;
+  $("hint").hidden = false;
+  return window.samjhoVoice.start(lang());
+}
+document.querySelector('.tile[data-mode="browser"]').addEventListener("click", () => startBrowserVoice().catch((e) => note(e.message, "case")));
 
 loadStatus().catch(() => {
   $("keys").textContent = "Could not reach the server.";

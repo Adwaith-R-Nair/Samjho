@@ -3,7 +3,7 @@
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -66,6 +66,20 @@ def text_say(body: SayIn) -> dict:
     session = found[1]
     _sessions[body.session_id] = (time.time(), session)
     return {"events": session.hear(body.text[:500]), "done": session.done}
+
+
+@app.websocket("/ws/browser")
+async def ws_browser(websocket: WebSocket, lang: str = "hi") -> None:
+    """Browser voice: PCM16 16 kHz audio both ways, UI events as JSON. See app/voice.py."""
+    await websocket.accept()
+    key = load_settings().sarvam_api_key
+    if not key:
+        await websocket.send_json({"type": "case", "case": "KEY_NOT_SET", "detail": "SARVAM_API_KEY not set"})
+        await websocket.close()
+        return
+    from app.voice import run_browser_session  # imported here so text mode starts without loading Pipecat
+
+    await run_browser_session(websocket, lang, key)
 
 
 @app.get("/")
