@@ -1,8 +1,9 @@
 # Samjho: roadmap
 
-Status words: **Done** (in the repository and tested), **In progress** (code being written now),
-**Planned** (not built). Test suite at the time of writing: 577 tests, all passing. The build history with what broke and how it was fixed is in
-[BUILD_LOG.md](BUILD_LOG.md). Requirement IDs (FR-n) refer to [PRD.md](PRD.md).
+Status words: **Done** (committed and tested), **Built, live call pending** (committed, tested and proven in a
+simulation, not yet on a real phone network), **Partly done**, **Planned** (not built). The build history with
+what broke and how it was fixed is in [BUILD_LOG.md](BUILD_LOG.md). Requirement IDs (FR-n) refer to
+[PRD.md](PRD.md). Test suite at the time of writing: 630 tests, all passing.
 
 ## Round 2: 27 to 30 Nov 2026
 
@@ -14,36 +15,28 @@ Submission deadline: Mon 30 Nov, 11:59 pm IST. Each step is one commit after its
 |---|---|---|
 | Capture the Round 2 brief and rules | Done | Summary in BUILD_LOG.md |
 | Choose what to build: extend Round 1 as "Her voice, not her thumb" | Done | Reasons and honest limits in BUILD_LOG.md |
-| Sarvam and Gemini keys created and tested | Done | One Hindi line synthesised, Flash models listed |
-| Twilio paid account (trial accounts cannot call India) | Planned | Waits on an international-enabled card; does not block browser voice |
-| Hosting for the live link | Done (decision) | Railway trial; a Cloudflare tunnel from the laptop for development only |
+| Sarvam and Gemini keys created and tested | Done | |
+| Twilio paid account (trial accounts cannot call India) | Planned | Waits on an international-enabled card; the only thing between the phone code and a live call |
+| Hosting for the live link | Planned | Railway trial (not yet deployed); a Cloudflare tunnel from the laptop for development only |
 
-### Sat 28 Nov
+### Build steps
 
 | Step | Work | Status | Evidence in the repo |
 |---|---|---|---|
-| 1 | App starts with no keys: FastAPI, one-screen UI, `/healthz`, `/api/status`, Dockerfile, docker compose, `.env.example`, CI that boots a fresh clone | Done | `app/main.py`, `app/config.py`, `web/`, `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `tests/test_app.py` |
-| 2 | Hindi/Hinglish/Devanagari/digit number parser with 150+ tests, confusion pairs trigger a re-ask, fail closed (FR-5) | Done (BUILD_LOG commit 3) | `app/hi_numbers.py`, `tests/test_hi_numbers.py` (544 test cases) |
-| 3 | Deterministic grader and conversation state machine, end to end by typing: catch, repair, recheck, private question, consent, seal (FR-1 to FR-14) | Done (BUILD_LOG commit 4, with six bugs found and fixed) | `app/flow.py`, `app/grade.py`, `app/lines.py`, `app/loan.py`, `app/numwords.py`, `app/record.py`, typing mode in `web/app.js`, `tests/test_flow.py`, `tests/test_source_hygiene.py` |
-| 4 | Browser voice channel: microphone over WebSocket, Sarvam speech-to-text and text-to-speech, half duplex by default, latency per turn (FR-17) | In progress | Server side in the repository: `/ws/browser` in `app/main.py`, `app/voice.py`, `app/browser_serializer.py`. Browser microphone client in `web/` not yet written |
+| 1 | App starts with no keys: FastAPI, one-screen UI, `/healthz`, `/api/status`, Dockerfile, docker compose, `.env.example`, CI that boots a fresh clone | Done (BUILD_LOG commit 1) | `app/main.py`, `app/config.py`, `web/`, `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `tests/test_app.py` |
+| 2 | Hindi/Hinglish/Devanagari/digit number parser, confusion pairs flagged, fail closed (FR-5) | Done (commit 3) | `app/hi_numbers.py`, `tests/test_hi_numbers.py` (544 cases) |
+| 3 | Grader and conversation state machine end to end by typing: catch, repair, recheck, private question, consent, seal (FR-1 to FR-14) | Done (commit 4, six bugs found and fixed; commit 5 adds first-answer vs after-Samjho counts) | `app/flow.py`, `app/grade.py`, `app/lines.py`, `app/loan.py`, `app/numwords.py`, `app/record.py`, `tests/test_flow.py`, `tests/test_source_hygiene.py` |
+| 4 | Browser voice: mic over WebSocket, Sarvam speech-to-text and text-to-speech, half duplex, latency per turn (FR-17) | Done (commit 7, latency measured) | `app/voice.py`, `app/browser_serializer.py`, `web/voice.js`, `web/mic-worklet.js`, `tests/test_voice.py`, `scripts/voice_smoke.py` |
+| 5 | Gemini help and English mode | Partly done. Gemini answers her questions, fenced to the loan's numbers (commit 9, `app/answer.py`). English mode works by typing and voice. Gemini help with mapping words to facts (FR-18): Planned; grading stays rules-only | `app/answer.py`, `tests/test_flow.py` |
+| 6 | Twilio phone channel with call limits and kill switch (FR-19, FR-20); first real call; measure latency | Built, live call pending (commit 10). Proven end to end in a simulated call with live Sarvam speech; replies in 1.03 to 1.36 s. Not yet proven: Twilio hang-up, real network audio, the "International Call" label, barge-in feel on a real line | `app/phone.py`, `app/limits.py`, `web/phone.js`, `tests/test_phone.py`, `scripts/call_smoke.py --simulate` |
+| 7 | Unaided test sessions with real people on the synthetic loan, recorded only with consent; replay tile (FR-21); field phrases into the eval | Planned. So far only the builder's own real-mic test (commit 9), which led to the question answering | `replays/` (not present yet) |
+| 8 | Railway deploy; smoke test the live link from another network | Planned | |
+| 9 | Eval report, README, deck text, 3-minute video, one-page record summary. Freeze at 18:00 Mon 30 Nov, submit by 21:00 | Partly done: eval harness (commit 6) and a README that only claims what runs, plus `scripts/verify_record.py` (commit 8). Eval report with field phrases, deck, video and summary page: Planned | `eval/run_eval.py`, `eval/synthetic.jsonl`, `tests/test_eval.py`, `README.md` |
 
-### Sun 29 Nov
-
-| Step | Work | Status |
-|---|---|---|
-| 5 | Gemini extraction that only suggests assignments, 1.5 s timeout, rules-only fallback (FR-18). English mode end to end (FR-15: English spoken lines already exist in `app/lines.py`) | Planned |
-| 6 | Twilio phone channel with call limits, number rule and kill switch (FR-19); first real call; measure latency | Planned |
-| 7 | Unaided test sessions with real people on the synthetic loan, recorded only with consent; replay tile (FR-20). The tile turns on only when a session file exists under `replays/` | Planned |
-| 8 | Railway deploy; smoke test the live link from another network | Planned |
-
-### Mon 30 Nov
-
-| Step | Work | Status |
-|---|---|---|
-| 9 | Eval report (accuracy, false passes, P50/P95 latency), README where every claim maps to code, deck text, 3-minute video, one-page record summary (FR-21). Freeze at 18:00, submit by 21:00 | Planned |
+Also done along the way: design docs (commits 2 and 5).
 
 ### Gates for every step
-- No step merges if tests fail or the eval shows any false pass on a critical fact.
+- No step merges if tests fail or the eval shows any false pass on a critical fact (`tests/test_eval.py`).
 - No real personal data in the repository; synthetic loan only; replays only from consenting testers.
 - Every README and deck claim points to code or a logged result.
 
@@ -55,22 +48,22 @@ pitch). Everything below is **Planned**; none of it is built.
 ### Finale build (13 Dec)
 | Item | Why |
 |---|---|
-| Barge-in on the phone path, per-state turn timing for number answers | Natural conversation on a keypad phone |
 | Lender view of records: list, filter by CALLBACK and HOLD_REVIEW, verify seal | The buyer's screen |
 | Load any KFS into the `Loan` shape (`app/loan.py`) from a file or API | Each borrower's own loan instead of the sample |
 | One more language through the same engine | Show the engine is not Hindi-only |
+| Browser barge-in with echo cancellation | The phone already allows interruptions; the browser is half duplex today |
 
 ### Pilot shape
 | Item | Plan |
 |---|---|
 | Partner | One NBFC-MFI branch, shadow mode: Samjho runs alongside the current acknowledgement and does not replace it |
-| Measure | Facts correct at first teach-back vs after repair; correct recall at signing and again later; completion rate; HOLD_REVIEW and CALLBACK volumes; call minutes per loan |
+| Measure | Facts right on first answer vs after Samjho (already in every record); correct recall at signing and again later; completion rate; HOLD_REVIEW and CALLBACK volumes; call minutes per loan |
 | Safeguards | Borrower consent before any recording, lender data stays in the lender's environment, no decision on the loan is taken by Samjho |
 | Reach | Through the two RBI-recognised self-regulatory organisations (Sa-Dhan and MFIN), which can reach member lenders |
 
 ### More languages
 Kannada, Bengali, Odia and Tamil through the same flow and grader. Each language needs its own number parser,
-cue words, spoken lines and tests before it ships; the zero-false-pass gate applies per language.
+cue words, spoken lines, fixed answers and tests before it ships; the zero-false-pass gate applies per language.
 
 ### Lender integration
 | Item | Plan |

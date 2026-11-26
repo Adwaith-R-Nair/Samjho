@@ -1,76 +1,91 @@
 # Samjho: high-level design
 
-Scope: the system as it exists in this repository, plus the parts still being built, each marked
-**Planned** with its roadmap step ([ROADMAP.md](ROADMAP.md)). Module-level detail is in [LLD.md](LLD.md).
-All loan data is synthetic.
+Scope: the system as committed in this repository. Anything not built is marked **Planned** with its roadmap
+step ([ROADMAP.md](ROADMAP.md)). Module-level detail is in [LLD.md](LLD.md). All loan data is synthetic.
 
-## 1. Principle: the LLM never decides
+## 1. Principles
 
+### The LLM never decides
 Whether a fact is green, amber, red or grey is decided only by deterministic Python in `app/grade.py`, using
 tolerances in `app/loan.py`. The conversation order is a state machine in `app/flow.py`. Spoken lines are fixed
-templates in `app/lines.py`, filled from the loan.
+templates in `app/lines.py`, filled from the loan. The same input always gets the same verdict, the verdict can
+be explained from the code, and grading works with no LLM key.
 
-The current code calls no LLM at all. The voice pipeline (`app/voice.py`) is built on Pipecat's LLM-style
-aggregator, but its `Brain` processor sends her finished turn to `Session.hear()` and drops the LLM context
-frame, so no model is asked anything. The planned Gemini extractor (step 5) may only suggest which fact a
-spoken number belongs to; its output would still pass through the same `judge()` function, and if it is slow
-or missing, the rules in `app/grade.py` are used. This means the same input always gets the same verdict, the
-verdict can be explained from the code, and the system works with no LLM key.
+The voice pipeline is built on Pipecat's LLM-style user aggregator, but its `Brain` processor sends her finished
+turn to `Session.hear()` and drops the LLM context frame, so no model is asked to judge anything.
+
+### Gemini may explain, never judge; its numbers are fenced
+The only LLM call in the code is in `app/answer.py`, and only for a question she asks during the explanation
+that our fixed answers do not cover. Gemini (`gemini-3.5-flash-lite`) sees only the loan's facts. Every number in
+its answer must be one of the loan's own numbers (`allowed_numbers`), or the answer is thrown away; "I do not
+know" answers are dropped; a 3 s cut-off is enforced on our side. Without a key, or when Gemini fails, the
+question is noted for the lender. Gemini output never reaches the grader.
 
 ## 2. Context
 
 ```mermaid
 flowchart LR
-    borrower(["Borrower<br/>(voice or typing)"])
-    judge(["Tester or judge<br/>(browser)"])
+    borrower(["Borrower<br/>(browser, phone or typing)"])
+    tester(["Tester or judge<br/>(browser)"])
     lender(["Lender: compliance,<br/>grievance officer"])
 
     subgraph samjho["Samjho (one container, one FastAPI process, port 7860)"]
         ui["Web UI<br/>web/"]
         server["FastAPI server<br/>app/main.py"]
+        voice["Voice pipeline<br/>app/voice.py"]
+        phone["Call desk, limits, watch hub<br/>app/phone.py, app/limits.py"]
         core["Session state machine + grader<br/>app/flow.py, app/grade.py"]
+        answer["Question answering<br/>app/answer.py"]
         ledger["Ledger and record<br/>app/record.py"]
     end
 
     sarvam[("Sarvam<br/>speech-to-text, text-to-speech")]
-    gemini[("Gemini<br/>extraction only")]
+    gemini[("Gemini<br/>answers questions only")]
     twilio[("Twilio<br/>phone calls")]
 
-    judge --> ui
+    tester --> ui
     borrower --> ui
     ui <--> server
     server <--> core
+    server <--> voice
+    server <--> phone
+    phone --> voice
+    voice <--> core
+    voice <--> sarvam
+    core --> answer
+    answer -. "optional, fenced" .-> gemini
     core --> ledger
-    server -. "In progress, step 4" .-> sarvam
-    server -. "Planned, step 5" .-> gemini
-    borrower -. "Planned, step 6: phone call" .-> twilio
-    twilio -. "Planned, step 6" .-> server
+    phone <-. "built, live call pending" .-> twilio
+    borrower -. "phone call" .-> twilio
     ledger -. "record JSON (download today; lender routing Planned)" .-> lender
 ```
 
-Solid lines exist and are working today. Dotted lines are in progress or planned.
+Solid lines are built and exercised. Dotted lines are optional, pending a live run, or planned.
 
 ## 3. Components
 
 | Component | Files | Responsibility | Status |
 |---|---|---|---|
-| Web UI | `web/index.html`, `web/app.js`, `web/style.css` | One screen: four start tiles, language choice, transcript with English gloss, five fact chips, case notes, record card with JSON download. Renders every channel through one `handleEvent()` | Built (typing mode wired; voice, phone and replay tiles show their status; the browser microphone client is step 4) |
-| FastAPI server | `app/main.py` | Serves the UI and static files, `/healthz`, `/api/status` (replay is ready only when `replays/*.json` exists), the typing-mode API, and the `/ws/browser` voice socket; holds typing sessions in memory (30-minute idle expiry, at most 200) | Built |
-| Settings | `app/config.py` | Reads optional keys from the environment or `.env`; reports which features are ready and why not, never the key values | Built |
+| Web UI | `web/index.html`, `web/app.js`, `web/style.css` | One screen: four start tiles, language choice, transcript with English gloss, five fact chips, case and latency notes, record card with JSON download. Every channel renders through one `handleEvent()` | Built |
+| Browser voice client | `web/voice.js`, `web/mic-worklet.js` | AudioWorklet captures the mic at 16 kHz PCM16 in 20 ms chunks; plays returned audio gaplessly; sends silence while playing and for 0.3 s after | Built |
+| Phone client | `web/phone.js` | Form for an Indian mobile number and consent; `POST /api/call`; follows the call on `/ws/watch` | Built, live call pending |
+| FastAPI server | `app/main.py` | UI and static files, `/healthz`, `/api/status`, typing API, `/ws/browser`, `/api/call`, `/ws/twilio`, `/ws/watch`; typing sessions in memory (30-minute idle expiry, at most 200) | Built |
+| Settings | `app/config.py` | Optional keys from the environment or `.env`; reports which features are ready and why not, never the key values | Built |
 | Session state machine | `app/flow.py` | consent, explain, teachback, check, private, final_consent, done. Emits events; writes every step to the ledger | Built |
+| Question answering | `app/answer.py` | Fixed intents, then fenced Gemini, then "noted for the lender" | Built |
 | Grader | `app/grade.py`, `app/loan.py` | Assigns spoken numbers to facts by cue words in the same clause, then judges each against the loan with tolerances | Built |
-| Number parser | `app/hi_numbers.py` | Hindi, Hinglish, Devanagari, English and digit numbers to values with a confidence flag and alternatives; payment schedule, instalment count and duration. Pure functions, no I/O | Built (544 test cases) |
+| Number parser | `app/hi_numbers.py` | Hindi, Hinglish, Devanagari, English and digit numbers to values with confusion flags and alternatives; schedule, count and duration. Pure functions | Built |
 | Spoken lines | `app/lines.py`, `app/numwords.py` | Every line in Hindi (Devanagari, amounts as words) and English, built from the loan | Built |
-| Ledger and record | `app/record.py`, `Session.record()` | Append-only hash-chained log; record with per-fact results, cases, consent and SHA-256 seal; `verify()` | Built |
-| Extractor | `app/extract.py` | Gemini JSON extraction, 1.5 s timeout, rules-only fallback | Planned (step 5) |
-| Browser voice channel | `app/voice.py`, `app/browser_serializer.py` | Mic audio over `/ws/browser`, Sarvam STT and TTS on Pipecat 1.17, half duplex, per-turn latency events, at most 4 live sessions | In progress (step 4: server side in the repository; browser client not yet) |
-| Phone channel | `/api/call`, `/ws/twilio` | "We call you" to Indian mobiles via Twilio Media Streams, same pipeline at 8 kHz | Planned (step 6) |
-| Call limits | `app/limits.py` | Number rule, cooldowns, per-IP and global limits, kill switch | Planned (step 6); kill switch flag already read in `app/config.py` |
-| Replay | `/api/replay`, `replays/` | Re-emit a recorded, consented session's events on the same UI, labelled REPLAY | Planned (step 7); status reports "No recorded test session added yet" until a file exists |
+| Ledger and record | `app/record.py`, `Session.record()`, `scripts/verify_record.py` | Append-only hash-chained log; record with per-fact results, first-answer and after-Samjho counts, cases, consent and SHA-256 seal | Built |
+| Voice pipeline | `app/voice.py`, `app/browser_serializer.py` | One Pipecat 1.17 pipeline, two profiles: browser (16 kHz, half duplex) and phone (8 kHz, barge-in) | Built (browser); built, live call pending (phone) |
+| Call desk and watch hub | `app/phone.py` | Checks, places the Twilio call with a one-time stream token, runs the phone session, publishes events to the browser watching it | Built, live call pending |
+| Call limits | `app/limits.py` | Per-number, per-IP and global limits, salted hashes, in memory | Built |
+| Evaluation | `eval/run_eval.py`, `eval/synthetic.jsonl` | Grades a fixed phrase set; reports accuracy and false passes | Built |
+| Replay | `replays/` | Re-emit a recorded, consented session's events, labelled REPLAY | Planned (step 7) |
 
 ## 4. Data flow for one turn
 
-### Typing mode (built)
+### Typing mode
 
 ```mermaid
 sequenceDiagram
@@ -93,34 +108,59 @@ sequenceDiagram
     UI->>UI: handleEvent() for each event
 ```
 
-### Voice turn in the browser (In progress, step 4)
-The channel's only job is to turn her speech into text for `Session.hear()` and to speak the `say` events back
-(stated in the `app/flow.py` docstring). Server side, as written in `app/voice.py`:
+In the `explain` state, `hear()` calls `app/answer.py` instead of the grader (fixed answer, then fenced Gemini,
+then "noted for the lender").
+
+### Browser voice
 
 ```mermaid
 flowchart LR
-    mic["Browser mic<br/>PCM16 16 kHz"] --> ws["WebSocket /ws/browser<br/>BrowserSerializer"]
+    mic["Browser mic<br/>AudioWorklet, PCM16 16 kHz"] --> ws["WebSocket /ws/browser<br/>BrowserSerializer"]
     ws --> gate["EchoGate<br/>silence while bot speaks"]
     gate --> stt["Sarvam STT<br/>saaras:v4, codemix"]
     stt --> agg["User turn aggregator<br/>Silero VAD, speech timeout,<br/>half-duplex mute"]
-    agg --> brain["Brain<br/>Session.hear(), no LLM"]
+    agg --> brain["Brain<br/>Session.hear() in a thread"]
     brain --> tts["Sarvam TTS<br/>bulbul:v4-flash"]
     tts --> out["WebSocket /ws/browser<br/>audio + JSON events"]
     brain -- "UI events" --> out
 ```
 
-1. The browser sends raw PCM16 mono 16 kHz audio as binary WebSocket messages.
-2. Half duplex: while Samjho speaks (and for 0.25 s after), mic audio is replaced with silence, and the turn
-   aggregator mutes the user. A plain WebSocket has no browser echo cancellation, so this stops her laptop
-   speakers being heard as her.
-3. Her turn ends after 0.9 s of silence (0.6 s in yes/no states), so "pachaas ... hazaar" is not cut.
-4. The final transcript goes to `Session.hear()`: the same code path as typing mode.
-5. Each event is sent to the browser as JSON text on the same socket; each `say` line is spoken by Sarvam TTS
-   and sent back as binary audio. A `latency` event (end of her speech to first reply audio) follows each turn.
+1. The browser sends PCM16 mono 16 kHz audio as binary WebSocket messages.
+2. Half duplex: the browser sends silence while it plays (plus 0.3 s); the server blanks mic audio while
+   Samjho speaks (plus 0.25 s) and mutes the user. A plain WebSocket has no browser echo cancellation, so this
+   stops laptop speakers being heard as her. She cannot interrupt in the browser.
+3. Her turn ends after 0.9 s of silence when a number is expected, 0.6 s in yes/no states.
+4. The transcript goes to `Session.hear()` in a worker thread, so a 3 s Gemini wait never stalls audio.
+5. All `say` lines of one reply are spoken as one utterance; every event goes to the browser as JSON on the same
+   socket; a `latency` event follows each turn.
 
-### Phone turn (Planned, step 6)
-Same pipeline at 8 kHz on Twilio Media Streams (`/ws/twilio`), started by `/api/call`. How the panel receives
-events for a phone session is not built yet.
+### Phone call (built, live call pending)
+
+```mermaid
+sequenceDiagram
+    participant B as Browser (phone.js)
+    participant API as FastAPI
+    participant D as CallDesk (phone.py)
+    participant T as Twilio
+    participant P as Phone pipeline (voice.py)
+    participant H as WatchHub
+
+    B->>API: POST /api/call {phone, consent, lang, k}
+    API->>D: place(): kill switch, keys, access code, consent, number, limits
+    D->>T: calls.create(TwiML Stream to /ws/twilio with one-time token, 300 s limit)
+    D-->>B: {watch_id}
+    B->>API: WS /ws/watch?id=watch_id
+    T->>API: WS /ws/twilio (8 kHz mulaw)
+    API->>D: run_stream(): claim token once, for this call SID
+    D->>P: run_phone_session (same Session, PHONE profile)
+    P->>H: publish every UI event
+    H-->>B: events (backlog, then live)
+```
+
+Phone profile differences: 8 kHz end to end with Pipecat's Twilio serializer; the handset cancels echo, so she
+may interrupt, but only with two or more words while Samjho speaks; while a reply that states amounts is read,
+she is muted and her audio is blanked before speech-to-text, so the numbers are heard in full. UI events go to the
+watch hub, never to Twilio.
 
 ## 5. Deployment
 
@@ -129,42 +169,50 @@ events for a phone session is not built yet.
 | Local | Any machine with Docker | `docker compose up --build`, open http://localhost:7860. Every key is optional (`${VAR:-}` in `docker-compose.yml`) | Built |
 | Local without Docker | Python 3.11 | `uvicorn app.main:app --port 7860` (README) | Built |
 | Image | `Dockerfile` | `python:3.11-slim-bookworm`, installs `requirements.txt`, copies `app/` and `web/`, honours `$PORT` (default 7860), Python-based `HEALTHCHECK` on `/healthz` | Built |
-| CI | `.github/workflows/ci.yml` | Job 1: `pytest`. Job 2: fresh clone, `docker compose up --build` with no keys, wait for `/healthz`, check the main screen and the "SARVAM_API_KEY not set" status | Built |
-| Live link | Railway (trial) | Same Dockerfile, keys as Railway variables | Planned (step 8) |
-| Development tunnel | Cloudflare tunnel from the laptop | Gives Twilio a public https address during development only; not used for judging because a laptop cannot be trusted to stay up | Planned with step 6 |
+| CI | `.github/workflows/ci.yml` | Job 1: `pytest`. Job 2: fresh clone, `docker compose up --build` with no keys, wait for `/healthz`, check the main screen and "SARVAM_API_KEY not set" | Built |
+| Live link | Railway trial | Same Dockerfile, keys as Railway variables, `PUBLIC_BASE_URL` set to the Railway domain | Planned (step 8), not yet deployed |
+| Development tunnel | Cloudflare tunnel from the laptop | Gives Twilio a public https address during development (`scripts/call_smoke.py` docstring); not for judging, because a laptop cannot be trusted to stay up | Development only |
 
-One uvicorn worker: sessions (and, later, rate-limit state) are in process memory.
+One uvicorn worker: typing sessions, live voice sessions, pending calls, call limits and the watch hub are all
+in process memory, and a restart clears them.
 
 ## 6. Security and privacy
 
-| Area | Today (built) | Planned |
-|---|---|---|
-| Keys | Read from environment or `.env` (gitignored, excluded by `.dockerignore`). `/api/status` names a missing key, never a value (test: `test_status_never_echoes_a_key`) | Pinned model versions per provider |
-| Personal data | Synthetic sample loan only. No Aadhaar, account or phone number is asked for. Nothing is written to disk; sessions expire after 30 idle minutes, at most 200 kept | Phone numbers stored only as salted hashes and masked in logs (step 6) |
-| Recordings | None made: voice audio is streamed through the pipeline and not stored. `.gitignore` excludes `*.wav`, `*.mp3`, `recordings/` | Test-session audio only with the tester's spoken consent, voice only (step 7) |
-| Input handling | Typed text truncated to 500 characters. The UI inserts user text with `textContent` or an HTML escape | |
-| Abuse | Typing mode calls no paid service. Voice: at most 4 live sessions per process, each ended after 5 minutes (`app/voice.py`) | Phone: Indian mobile numbers only, consent checkbox, per-number cooldown, per-IP and global limits, call time cap, `CALLS_ENABLED` kill switch (step 6) |
-| Integrity | Hash-chained ledger; tampering breaks the seal (test: `test_tampering_with_the_log_breaks_the_seal`). Whole amounts are stored as integers, so a copy re-written by the browser still verifies (test: `test_record_amounts_are_integers_so_a_browser_copy_still_verifies`) | |
-| API surface | FastAPI's `/docs` and `/redoc` are turned off | |
+| Area | What the code does |
+|---|---|
+| Keys | Read from environment or `.env` (gitignored, excluded by `.dockerignore`). `/api/status` names a missing key, never a value (`test_status_never_echoes_a_key`). Tests never call Gemini (`tests/conftest.py`) |
+| Personal data | Synthetic sample loan only. No Aadhaar or account number is asked for. Nothing is written to disk |
+| Phone numbers | Only `+91[6-9]` plus 9 digits accepted. Kept only as salted HMAC hashes (salt random per process) for the limits; logged masked (`+91XXXXXX1234`) |
+| Data sent to providers | Voice audio to Sarvam; call audio through Twilio; when a Gemini key is set, the text of a question not covered by the fixed answers, with the loan's facts, to Google |
+| Recordings | None made. `.gitignore` excludes `*.wav`, `*.mp3`, `recordings/`. Replays only from consenting testers (Planned) |
+| Calls | Consent checkbox required; optional `JUDGE_TOKEN` access code (constant-time compare); `CALLS_ENABLED` read on every request; one-time stream token, valid 120 s and bound to the call SID, so nobody else can attach to a call; calls end after 300 s |
+| Abuse limits | Per number 1 call per 30 min and 3 per day; per IP 3 per hour; 2 calls at once and 40 per day overall; owner numbers skip only the per-number and per-IP limits; at most 4 live browser voice sessions, each up to 5 minutes |
+| Client IP | Taken from the socket; `CF-Connecting-IP` or `X-Forwarded-For` are trusted only when the request comes from loopback (a local tunnel) |
+| Input handling | Typed text truncated to 500 characters. The UI inserts user text with `textContent` or an HTML escape |
+| Integrity | Hash-chained ledger; tampering breaks the seal; a browser-written copy still verifies |
+| API surface | FastAPI's `/docs` and `/redoc` are turned off |
 
-The private extra-money answer: in the prototype it is written to the record as a `HOLD_REVIEW` case and shown
-on the panel. Routing it to a lender's grievance officer (and not the field officer) needs lender integration,
-which is Planned after Round 2.
+The private extra-money answer is written to the record as a `HOLD_REVIEW` case and shown on the panel. Routing it
+to a lender's grievance officer (and not the field officer) needs lender integration: Planned after Round 2.
 
 ## 7. Failure modes and fallbacks
 
-| Failure | What happens today | Planned |
-|---|---|---|
-| `SARVAM_API_KEY` not set | Voice tile disabled with "SARVAM_API_KEY not set"; `/ws/browser` sends a `KEY_NOT_SET` case event and closes; typing mode works | |
-| Too many voice sessions | `/ws/browser` sends a `BUSY` case event ("Too many live sessions, try again") and closes | |
-| Browser closes the tab, or 5 minutes pass | The session's pipeline is cancelled | |
-| Sarvam down during a session | No specific handling yet | Tell her and offer typing mode; another speech provider can be swapped in because the flow and grader do not depend on Sarvam (step 4 onward) |
-| `GOOGLE_API_KEY` not set | Status says "GOOGLE_API_KEY not set: rules-only extraction". Grading is rules-only in every case today | |
-| Gemini slow or down | Not applicable yet (no LLM call) | 1.5 s timeout, then rules-only (step 5) |
-| Twilio keys, `PUBLIC_BASE_URL` or `CALLS_ENABLED` missing | Phone tile disabled with the reason | |
-| Number word unclear | The parser skips words it cannot read and flags confusion pairs (pachaas/pachpan and others) with the other reading. `judge()` returns amber "unclear word, confirm" only if the other reading would change the status, and the repair asks her to say it again. Example: "pachaas hazaar" for cash in hand is red, because 50,000 and 55,000 are both wrong | |
-| Fact still wrong after 2 repairs | Marked UNCLEAR, CALLBACK case, flow continues; the loan is never blocked | Callback routed to the lender (after Round 2) |
-| Unrecognised yes or no | "Sorry, I did not catch that", same state | |
-| Question the FAQ cannot answer | Logged as a question for the lender, never guessed | |
-| Session expired or server restarted | `/api/text/say` returns 404 "session expired, start again"; in-memory sessions are lost on restart | |
-| Whole service down | Nothing depends on Samjho to disburse: the lender's existing acknowledgement remains the fallback | |
+| Failure | What happens |
+|---|---|
+| `SARVAM_API_KEY` not set | Voice and phone tiles disabled with the reason; `/ws/browser` sends a `KEY_NOT_SET` notice and closes; typing works |
+| `GOOGLE_API_KEY` not set | Questions get fixed answers or "noted for the lender"; grading is unaffected (always rules-only) |
+| Gemini slow, failing, or answering with a number not in the loan | Answer dropped after 3 s or on the fence check; the question is noted for the lender |
+| Twilio keys, `PUBLIC_BASE_URL` or `CALLS_ENABLED` missing | Phone tile disabled with the reason; `/api/call` refuses with 503 (not set up) or 403 (paused) |
+| Call limit reached | `/api/call` returns 429 with a plain reason (cooldown, daily cap, network, concurrency) |
+| Twilio refuses the call | 502 with Twilio's message; the limit slot is released |
+| Call not answered within 120 s | Token expires, slot released, watcher told "not answered" |
+| Wrong or reused stream token | `/ws/twilio` closes with code 1008 |
+| Unknown watch id | `/ws/watch` sends `WATCH_UNKNOWN` and closes |
+| Too many voice sessions | `/ws/browser` sends a `BUSY` notice and closes |
+| Browser leaves, or 5 minutes pass | The session's pipeline is cancelled |
+| Number word unclear | The parser skips unreadable words and flags confusion pairs. `judge()` returns amber "unclear word, confirm" only if the other reading would change the status, and she is asked again. "pachaas hazaar" for cash in hand is red: 50,000 and 55,000 are both wrong |
+| Fact still wrong after 2 repairs | UNCLEAR, CALLBACK case, flow continues; the loan is never blocked |
+| Unrecognised yes or no | "Sorry, I did not catch that", same state |
+| Sarvam down during a session | No specific handling yet. Planned: tell her and offer typing mode |
+| Session expired or server restarted | `/api/text/say` returns 404 "session expired, start again"; in-memory state is lost on restart |
+| Whole service down | Nothing depends on Samjho to disburse: the lender's existing acknowledgement remains the fallback |

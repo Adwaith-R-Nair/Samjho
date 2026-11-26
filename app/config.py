@@ -52,7 +52,7 @@ class Settings:
             "voice": state(self.voice_ready, "SARVAM_API_KEY not set"),
             "extract": state(
                 bool(self.google_api_key),
-                "GOOGLE_API_KEY not set: rules-only extraction",
+                "GOOGLE_API_KEY not set: unexpected questions are noted for the lender",
             ),
             "phone": state(
                 self.phone_ready,

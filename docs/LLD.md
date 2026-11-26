@@ -1,153 +1,135 @@
 # Samjho: low-level design
 
-Module by module, as the code stands. Modules not yet in the repository have a **Planned interface** subsection;
-those interfaces may change when the code lands. Architecture overview: [HLD.md](HLD.md).
+Module by module, as committed. Anything not built is marked **Planned** with its roadmap step
+([ROADMAP.md](ROADMAP.md)). Architecture overview: [HLD.md](HLD.md).
 
 ## 1. Repository map
 
 | Path | Purpose | Status |
 |---|---|---|
-| `app/main.py` | FastAPI app, routes, in-memory session store | Built |
+| `app/main.py` | FastAPI app, routes, in-memory typing sessions | Built |
 | `app/config.py` | Optional settings and feature status | Built |
 | `app/flow.py` | `Session` state machine, `yes_no()` | Built |
+| `app/answer.py` | Answers to her questions: fixed intents, fenced Gemini, `warm()` | Built |
 | `app/grade.py` | `assign()`, `judge()`, `_status()`, `grade()`, `Evidence`, `Verdict` | Built |
-| `app/loan.py` | `Loan`, `SAMPLE_LOAN`, `FACTS`, `TOLERANCE`, `truth()` | Built |
-| `app/lines.py` | Every spoken line in Hindi and English | Built |
-| `app/numwords.py` | Rupee amounts as Hindi words | Built |
-| `app/record.py` | `Ledger`, `verify()` | Built |
 | `app/hi_numbers.py` | Number, schedule, count and duration parser | Built |
-| `app/voice.py`, `app/browser_serializer.py` | Browser voice channel, server side | In progress (step 4) |
-| `app/extract.py`, `app/limits.py` | Gemini extraction; call limits | Planned (steps 5, 6) |
-| `web/` | Single-page UI, vanilla JS, no build step | Built |
-| `tests/` | pytest suites (577 tests, all passing at the time of writing) | Built |
+| `app/loan.py` | `Loan`, `SAMPLE_LOAN`, `FACTS`, `TOLERANCE`, `truth()` | Built |
+| `app/lines.py`, `app/numwords.py` | Every spoken line in Hindi and English; amounts as Hindi words | Built |
+| `app/record.py` | `Ledger`, `verify()` | Built |
+| `app/voice.py`, `app/browser_serializer.py` | Pipecat pipeline with browser and phone profiles; browser wire format | Built (phone: live call pending) |
+| `app/phone.py`, `app/limits.py` | Call desk, watch hub, one-time tokens; call limits | Built, live call pending |
+| `web/` | `index.html`, `app.js`, `voice.js`, `mic-worklet.js`, `phone.js`, `style.css`; vanilla JS, no build step | Built |
+| `eval/run_eval.py`, `eval/synthetic.jsonl` | False-pass evaluation over 53 synthetic phrases | Built |
+| `scripts/verify_record.py`, `scripts/voice_smoke.py`, `scripts/call_smoke.py` | Seal checker; live browser-voice smoke test; phone smoke test (live or `--simulate`) | Built (not run in CI: they need keys) |
+| `tests/` | 630 tests, all passing at the time of writing | Built |
 | `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Image, one-command start, CI | Built |
+| `replays/` | Consented recorded sessions for the replay tile | Planned (step 7) |
 
-## 2. `app/loan.py`
+## 2. `app/loan.py` and the grading rules
 
 `Loan` is a frozen dataclass: `loan_id, lender, sanctioned, processing_fee, insurance, instalment, frequency
 ("weekly" or "monthly"), instalments, total_repayable, apr_percent, grievance_contact, extra`.
-Derived properties: `deductions = processing_fee + insurance`, `cash_in_hand = sanctioned - deductions`.
+Derived: `deductions = processing_fee + insurance`, `cash_in_hand = sanctioned - deductions`.
 
 `SAMPLE_LOAN` (synthetic): id `SAMPLE-JLG-50000`, sanctioned 50,000, fee 1,000, insurance 590, instalment 1,095,
 weekly, 52 instalments, total 56,940, APR 32.8%.
 
-`FACTS = ("cash_in_hand", "deductions", "instalment", "frequency", "total")`. This order is the order in which
-the flow asks about or repairs facts.
+`FACTS = ("cash_in_hand", "deductions", "instalment", "frequency", "total")`, also the order in which the flow
+asks about or repairs facts. `truth(loan, fact)` returns the true value (`"total"` maps to `total_repayable`).
 
-`truth(loan, fact)` returns the true value of a fact (`"total"` maps to `total_repayable`).
-
-### Grading rules and tolerances
+### Tolerances
 Gap is relative: `gap = |said - truth| / truth`. `TOLERANCE[fact] = (green_max, amber_max)`.
 
 | Fact | True value | Green if gap <= | Amber if gap <= | Otherwise | Worked examples |
 |---|---|---|---|---|---|
-| cash_in_hand | 48,410 | 3% | 3% (no amber band) | red | 50,000 is 3.3% off: red. Spoken as "pachaas hazaar", the parser flags the pachaas/pachpan pair, but the other reading (55,000) is also red, so it stays red (rule 3) |
+| cash_in_hand | 48,410 | 3% | 3% (no amber band) | red | 50,000 is 3.3% off: red. "pachaas hazaar" is flagged (pachaas/pachpan), but 55,000 is also red, so it stays red |
 | deductions | 1,590 | 10% | 40% | red | 1,590 green; 1,000 or 590 said alone: amber "named only one deduction" |
 | instalment | 1,095 | 5% | 12% | red | 1,100 ("gyarah sau") green; 1,000 amber |
-| total | 56,940 | 3% | 8% | red | |
+| total | 56,940 | 3% | 8% | red | "pachaas hazaar" for the total: 50,000 is red but 55,000 is amber, so it is asked again (amber "unclear word, confirm") |
 | frequency | weekly | exact match | n/a | red | "har mahine" (monthly) red |
 
-`_status(loan, fact, value, parts)` gives the status of one amount, in this order:
+### `_status(loan, fact, value, parts) -> (status, reason)`
 1. Gap within green: `green`.
-2. Deductions said as one part whose value equals the fee (1,000) or the insurance (590): `amber`, "named only
-   one deduction".
+2. Deductions said as one part equal to the fee (1,000) or the insurance (590): `amber`, "named only one deduction".
 3. Gap within amber: `amber`, "close but not exact".
 4. Otherwise `red`, "does not match the loan".
 
-`judge(loan, fact, ev)`:
-1. No evidence: `grey`, reason "not said".
-2. Frequency: `green` if `ev.value == loan.frequency`, else `red`.
-3. Amounts: `status = _status(value)`. If the parser marked the number not confident and any of its
-   alternative readings would get a different status, return `amber`, "unclear word, confirm", and the flow
-   asks her again (fail closed: an uncertain word can never pass as green when the other reading would not).
-   Otherwise return `status`. So "pachaas hazaar" for cash in hand is red (50,000 and 55,000 are both red),
-   while a flagged word whose readings straddle a boundary is asked again.
+### `judge(loan, fact, ev) -> Verdict`
+1. No evidence: `grey`, "not said".
+2. Frequency: `green` if `ev.value == loan.frequency`, else `red` ("said monthly").
+3. Amounts: `status = _status(value)`. If the parser marked the number not confident and any alternative reading
+   gets a different status, return `amber`, "unclear word, confirm" (she is asked again; fail closed). Otherwise
+   return `status`.
 
-The tenure (52 weeks) is not graded as a separate fact. Counts such as "52 hafte" are excluded from rupee
-amounts (see `assign()` below).
+The tenure (52 weeks) is not graded as a separate fact. Counts such as "52 hafte" are excluded from rupee amounts.
 
 ## 3. `app/grade.py`
 
-### Data types
-- `Evidence(fact, value, quote, confident=True, alternatives=(), guessed=False, parts=1)`: `value` is a float
-  for amounts and a string for frequency; `quote` is her exact words for the number; `guessed` is True when the
-  fact was chosen by size alone; `parts` counts the deduction amounts that were summed.
+- `Evidence(fact, value, quote, confident=True, alternatives=(), guessed=False, parts=1)`: `value` is a number
+  for amounts and a string for frequency; `quote` is her exact words; `guessed` marks assignment by size alone;
+  `parts` counts summed deduction amounts.
 - `Verdict(fact, status, said=None, quote="", reason="")`: `status` is `green`, `amber`, `red` or `grey`
-  (`app/flow.py` also uses `unclear`).
+  (`app/flow.py` adds `unclear`).
 
 ### `assign(text, loan, target=None) -> dict[str, Evidence]`
-1. `parse_numbers(text)`; drop any number that is a count: value <= 120 and directly followed by a count word
-   (hafte, week, mahine, month, kisht, instalment, baar, and Devanagari forms).
-2. For each remaining number, find the nearest cue word within 32 characters on either side, but only inside
-   the same clause. Clauses are split by `_CLAUSE`: punctuation (`, ; : . ! ?` and the danda `।`) and the words
-   aur, and, phir, fir, then (and Devanagari और, फिर). So in "har hafte 1095 dena hai, kul 56,940" the word
-   "kul" belongs to 56,940, not to 1095. Cue words per fact (`CUES`, regex, Latin and Devanagari): cash in hand
-   ("haath", "hand", "milega", "aayenge", "nakad"), deductions ("kat", "fee", "bima", "insurance", "charge"),
-   instalment ("kisht", "emi", "bharna", "bharne", "jama", "dena", "har hafte", "har mahine", "weekly",
-   "monthly"), total ("kul", "total", "milakar", "wapas", "lauta").
-3. No cue: if `target` is set, is not frequency, and this is the only number, assign it to `target`.
-   Otherwise assign by size to the amount fact whose true value is closest, if within 45% (`guessed=True`).
-   Else drop it.
-4. Deductions: every number cued to deductions is summed into one `Evidence` (quote "a + b", `parts=n`),
-   except numbers above 20% of the sanctioned amount (`_MAX_DEDUCTION_SHARE`), which are ignored as not being
-   a deduction. Other facts: the first number said for a fact wins.
-5. Frequency: `parse_frequency(text)`, if it returns a value.
-
-### `judge(loan, fact, ev) -> Verdict`
-Rules in section 2.
+1. `parse_numbers(text)`; drop counts: value <= 120 directly followed by a count word (hafte, week, mahine, month,
+   kisht, instalment, baar, Devanagari forms).
+2. For each number, take the nearest cue word within 32 characters, **inside the same clause only**. `_CLAUSE`
+   splits on `, ; : . ! ?`, the danda `।`, and the words aur, and, phir, fir, then (और, फिर). So in
+   "har hafte 1095 dena hai, kul 56,940" the word "kul" belongs to 56,940. Cues (`CUES`, Latin and Devanagari):
+   cash in hand (haath, hand, milega, aayenge, nakad), deductions (kat, fee, bima, insurance, charge), instalment
+   (kisht, emi, bharna, bharne, jama, dena, har hafte, har mahine, weekly, monthly), total (kul, total, milakar,
+   wapas, lauta).
+3. No cue: if `target` is set, is not frequency, and this is the only number, it answers `target`. Otherwise it
+   goes to the amount fact whose true value is closest, if within 45% (`guessed=True`); else it is dropped.
+4. Deductions: numbers cued to deductions are summed (quote "a + b", `parts=n`), ignoring any above 20% of the
+   sanctioned amount (`_MAX_DEDUCTION_SHARE`). Other facts: the first number said wins.
+5. Frequency: `parse_frequency(text)`; the quote is her own words for it (`_freq_quote`: "mahine nahi, har hafte"
+   quotes "har hafte", not our label "weekly").
 
 ### `grade(text, loan, target=None) -> dict[str, Verdict]`
-Verdicts only for facts she spoke about. If `target` is given and she said nothing about it, a `grey` verdict
-for `target` is added.
+Verdicts only for facts she spoke about; if `target` is given and not mentioned, a `grey` verdict for it.
 
 ## 4. `app/hi_numbers.py`
 
-Deterministic and pure (no I/O, no network, no model calls). Input is code-mixed speech-to-text: Devanagari
-Hindi, romanised Hindi with spelling variants, English number words, digits (Western or Indian grouping,
-Devanagari digits), currency words and filler words.
+Deterministic and pure (no I/O, no network, no model calls). Input is code-mixed speech-to-text: Devanagari,
+romanised Hindi with spelling variants, English number words, digits (any grouping, Devanagari digits), currency
+and filler words.
 
 | Name | Contract |
 |---|---|
-| `ParsedNumber` | Frozen dataclass: `value` (float, for example `48410.0`), `raw` (the exact substring), `start`, `end` (offsets in the input), `confident` (False if a known confusion pair could flip it), `alternatives` (tuple of other values that still compose) |
-| `normalize(text) -> str` | One character in, one character out, so spans stay valid on the input |
-| `parse_numbers(text) -> list[ParsedNumber]` | All numbers in reading order. Unclear words are skipped, never guessed |
-| `parse_frequency(text) -> str or None` | `"weekly"`, `"monthly"`, `"fortnightly"`, `"daily"` or `None`. Negated cues are dropped ("mahine nahi, har hafte" is weekly); strong cues ("har hafte", "weekly") beat bare period nouns; a period after a number ("52 hafte") is a duration, not a schedule |
-| `parse_count(text) -> ParsedNumber or None` | Number of instalments: a number before kisht, EMI or baar, else before hafte, mahine or din |
-| `parse_duration(text) -> (value, unit) or None` | First "number period" phrase, unit in year, month, week, day |
+| `ParsedNumber` | Frozen: `value` (float), `raw` (exact substring), `start`, `end` (offsets in the input), `confident` (False if a known confusion pair could flip it), `alternatives` (other values that still compose) |
+| `normalize(text) -> str` | One character in, one out, so spans stay valid |
+| `parse_numbers(text) -> list[ParsedNumber]` | All numbers in reading order; unclear words are skipped, never guessed |
+| `parse_frequency(text) -> str or None` | `"weekly"`, `"monthly"`, `"fortnightly"`, `"daily"` or `None`. Negated cues dropped; strong cues ("har hafte", "weekly") beat bare period nouns; "52 hafte" is a duration, not a schedule |
+| `parse_count(text)`, `parse_duration(text)` | Number of instalments; first "number period" phrase |
 
-How numbers are built (from the module docstring): words are reduced to spelling keys and looked up in one
-lexicon; saade, sava and paune fuse with the next number (+0.5, +0.25, -0.25); dedh and dhai are 1.5 and 2.5;
-weak words that are also ordinary words (ek, do, saath "with") count as numbers only before a multiplier, a
-currency word or a unit noun; groups compose greedily as [unit] [sau [unit]] followed by hazaar, lakh or crore
-in strictly falling order. Words that 8 kHz audio often swaps (pachaas/pachpan, saath/saat, sattar/satrah,
-fifteen/fifty and similar) are re-evaluated with the swapped value; if that also composes, the number is marked
-not confident and the alternatives are kept.
-
-`app/grade.py` uses `parse_numbers` and `parse_frequency`. Any frequency other than the loan's (for example
-`"monthly"` or `"fortnightly"`) is red. Known limits are listed in the module docstring (for example, "aur"
-never joins two numbers).
+Composition: spelling keys into one lexicon; saade, sava, paune fuse with the next number (+0.5, +0.25, -0.25);
+dedh 1.5, dhai 2.5; weak words (ek, do, saath "with") count only before a multiplier, currency word or unit noun;
+groups compose greedily as [unit] [sau [unit]] then hazaar, lakh, crore in falling order. Confusion pairs
+(pachaas/pachpan, saath/saat, sattar/satrah, fifteen/fifty and others) are re-evaluated with the swapped word.
+Known limits are listed in the module docstring (for example, "aur" never joins two numbers).
 
 ## 5. `app/flow.py`
 
 ### `yes_no(text) -> bool | None`
-Regex for yes (haan, ji, yes, ok, theek, bilkul, sahmat, Devanagari forms) and no (nahi, na, no, mat, Devanagari
-forms). If both appear, the one that comes first wins ("nahi, kisi ne nahi maanga" is no; "haan, maanga tha" is
-yes). Neither: `None`.
+Yes (haan, ji, yes, ok, theek, bilkul, sahmat, Devanagari forms) or no (nahi, na, no, mat, Devanagari forms);
+if both appear, the first wins ("nahi, kisi ne nahi maanga" is no). Neither: `None`.
 
 ### `Session`
-Constructor: `Session(loan=SAMPLE_LOAN, lang="hi")`; `lang` is `"hi"` or `"en"` (anything else becomes `"hi"`).
-Fields: `id` (12 hex characters from a UUID4), `state`, `verdicts` (all five start `grey`), `rounds` (repairs
-per fact), `asked` (facts already probed), `target` (fact just asked about), `questions` (for the lender),
-`extra_money_reported`, `consent`, `ledger`.
+`Session(loan=SAMPLE_LOAN, lang="hi")`; `lang` is `"hi"` or `"en"`. Fields: `id` (12 hex characters), `state`,
+`verdicts`, `rounds`, `first_answer` (status of her first answer per fact), `asked`, `target`, `questions` (for
+the lender), `questions_asked`, `extra_money_reported`, `consent`, `ledger`. `MAX_ROUNDS = 2`,
+`MAX_QUESTIONS = 3`.
 
-Public API:
-- `start() -> list[event]`: logs `session_start`, enters `consent`, says the intro.
-- `hear(text) -> list[event]`: logs `heard`, dispatches to `_on_<state>`, returns the events produced. Empty
-  text: "did not catch that", no state change. After `done`: returns `[]`.
-- `done` (property): `state == "done"`.
-- `record() -> dict`: the record (section 8).
-
-`MAX_ROUNDS = 2`.
+- `start()`: logs `session_start`, calls `answer.warm()` (opens the Gemini connection in the background if a
+  key is set), enters `consent`, says the intro.
+- `hear(text)`: logs `heard`, dispatches to `_on_<state>`, returns the events. Empty text: "did not catch that".
+  After `done`: `[]`. May take up to about 3 s in `explain` when Gemini is asked; the voice channels call it in a
+  worker thread.
+- `record()`: section 8.
+- `_fact(v)`: converts a whole-number `said` to `int` before logging (so the record is written the same by Python
+  and by a browser), records the first status per fact in `first_answer`, logs a `verdict`, emits `fact`.
 
 ### State machine
 
@@ -155,79 +137,84 @@ Public API:
 |---|---|---|---|
 | (new) | `start()` | to `consent` | `state`, `say` intro |
 | any | empty text | stay | `heard`, `say` "did not catch" |
-| `consent` | yes | to `explain` | `state`, 4 `say` lines (amounts and cuts, weekly instalment for 52 weeks, total, "ask or say next") |
+| `consent` | yes | to `explain` | `state`, 4 `say` lines (amount and cuts, weekly instalment for 52 weeks, total, "ask or say next") |
 | `consent` | no | to `done` | `say` not started; consent `not_started`; `record` |
 | `consent` | unclear | stay | `say` "did not catch" |
-| `explain` | a question (question word or "?") matching an FAQ (insurance, fee, interest, missed payment) | stay | `say` fixed answer, `say` "any other question?" |
-| `explain` | a question with no FAQ match | stay | ledger `question_for_lender`; `say` "I am noting this; the lender will answer" |
-| `explain` | anything else ("aage", "next", "theek hai") | to `teachback` | `state`, `say` teach-back prompt |
-| `teachback` | her explanation | to `check`, then `_next()` | `fact` per fact she mentioned, `say` praise ("you got n right" or "all right") |
-| `check` | answer | `_next()` | `fact` for the target, and for any other fact she mentioned that is not already green |
-| `private` | yes | to `final_consent` | `case` `HOLD_REVIEW`, `say` thanks (goes to grievance officer), `state`, `say` consent question |
+| `explain` | no fixed answer, a move-on word ("aage", "theek", "samajh", "nahi") and no question word | to `teachback` | `state`, `say` teach-back prompt |
+| `explain` | answered by a fixed intent or by Gemini | stay (or `teachback` if this was question 3) | ledger `answered` (question, source `fixed` or `gemini`), `say` answer, then `say` "any other question?" or `say` "good questions, let us move on" and the teach-back prompt |
+| `explain` | a question with no answer | stay (or `teachback` if question 3) | ledger `question_for_lender`, `say` "the lender will answer; I have noted it", then as above |
+| `explain` | a statement with no answer and no question word | to `teachback` | `state`, `say` teach-back prompt |
+| `teachback` | her explanation | to `check`, then `_next()` | `fact` per fact she mentioned, `say` praise |
+| `check` | answer | `_next()` | `fact` for the target, and for any other mentioned fact not already green |
+| `private` | yes | to `final_consent` | `case` `HOLD_REVIEW`, `say` thanks (goes to the grievance officer), `state`, `say` consent question |
 | `private` | no | to `final_consent` | `say` thanks, `state`, `say` consent question |
-| `private` | unclear | stay | `say` "did not catch" |
-| `final_consent` | yes | to `done` | ledger `consent` (`given`, her words), `say` sealed, `record` |
-| `final_consent` | no | to `done` | ledger `consent` (`declined`), `say` declined, `record` |
-| `final_consent` | unclear | stay | `say` "did not catch" |
+| `private`, `final_consent` | unclear | stay | `say` "did not catch" |
+| `final_consent` | yes / no | to `done` | ledger `consent` (`given` or `declined`, her words), `say` sealed or declined, `record` |
 | `done` | anything | stay | nothing |
 
-`_next()` walks `FACTS` in order and acts on the first fact that is not `green` or `unclear`:
-1. `grey` and never asked: add to `asked`, set `target`, `say` the probe question (`lines.PROBE`). Return.
-2. Fewer than 2 repairs so far: increment `rounds`, set `target`, `say` the repair (quotes her words, gives the
-   true figures) and a fresh recheck question (`lines.RECHECK`, worded differently from the probe). Return.
-3. Otherwise: `fact` event with status `unclear` ("still not clear after two explanations"), `case` `CALLBACK`,
-   `say` "someone from the lender will call you". Continue to the next fact.
-When no fact needs action: `target = None`, enter `private`, `say` the private question.
+`_next()` walks `FACTS` and acts on the first fact not `green` or `unclear`:
+1. `grey` and never asked: probe question (`lines.PROBE`), set `target`. Return.
+2. Fewer than 2 repairs: repair quoting her words with the true figures, then a fresh recheck question
+   (`lines.RECHECK`). Return.
+3. Otherwise: `fact` `unclear`, `case` `CALLBACK`, `say` "someone from the lender will call you". Continue.
+Then: `target = None`, enter `private`, ask the private question.
 
-A green fact is never downgraded by an incidental later mention: in `check`, only the target fact or facts not
-already green are updated.
+## 6. `app/answer.py`
 
-## 6. `app/lines.py` and `app/numwords.py`
+`answer(text, loan) -> (line or None, source)` with source `"fixed"`, `"gemini"` or `"none"`:
+1. `fixed_answer()`: regex intents written by us, checked in order: explain again simply, how long, what else
+   (three things to remember, including that nobody may ask her for extra money), cash in hand, total,
+   instalment, then `lines.faq` (insurance incl. "bima", fee, interest, missed payment).
+2. If `GOOGLE_API_KEY` is set: `gemini_answer()`. Model `gemini-3.5-flash-lite`, temperature 0, JSON output,
+   `thinking_level="minimal"`, one reused client per key. The prompt carries only the loan's facts and the
+   question, and asks for at most two short sentences, digits only, no advice, no invented rules, fees or dates.
+   The call runs in a thread pool and is abandoned after `GEMINI_TIMEOUT_S = 3.0` (Gemini rejects request
+   deadlines under 10 s, so the cut-off is ours).
+3. **The fence:** the answer is discarded unless every number in both the Hindi and English text is in
+   `allowed_numbers(loan)` (sanctioned, fee, insurance, deductions, cash in hand, instalment, number of
+   instalments, total, total minus sanctioned, APR and its rounded value, and 1, 2, 3). "I do not know" answers
+   are discarded too. Digits in the Hindi answer are then written as Hindi words ("32.8" becomes "बत्तीस दशमलव आठ").
+4. Otherwise `(None, "none")`: the flow notes the question for the lender.
 
-`L(hi, en)` returns `{"hi": ..., "en": ...}`. Lines are functions of the `Loan`, so another KFS changes the words,
-not the code. Hindi lines are Devanagari, with amounts written as words by `numwords.rupees_hi()` so the voice
-reads them the way people say them (`hindi_words(48410)` is "अड़तालीस हज़ार चार सौ दस", Indian grouping:
-hazaar, lakh, crore). English amounts use `rupees_en()` ("Rs 48,410").
+`warm()` opens the Gemini connection in the background at session start, so the first question is not slow.
+Tests never call Gemini (`tests/conftest.py` removes the key).
 
-Contents: `intro`, `explain` (4 lines), `faq` (4 regex patterns with fixed answers), `unknown_question`,
-`ask_more`, `teachback`, `PROBE` and `RECHECK` (one question per fact), `repair`, `praise`, `unclear`,
-`FACT_LABEL`, `private_check`, `private_yes`, `private_no`, `consent`, `sealed`, `declined`, `not_started`,
-`didnt_catch`.
+## 7. `app/lines.py`, `app/numwords.py`, `app/config.py`
 
-## 7. `app/config.py`
+`L(hi, en)` returns `{"hi", "en"}`. Lines are functions of the `Loan`, so another KFS changes the words, not the
+code. Hindi amounts are words (`hindi_words(48410)` is "अड़तालीस हज़ार चार सौ दस"); English uses "Rs 48,410".
+Contents: `intro`, `explain`, `faq`, `noted_for_lender`, `move_on`, `ask_more`, `teachback`, `PROBE`, `RECHECK`,
+`repair`, `praise`, `unclear`, `FACT_LABEL`, `private_check`, `private_yes`, `private_no`, `consent`, `sealed`,
+`declined`, `not_started`, `didnt_catch`.
 
 `load_settings()` reads (all optional): `SARVAM_API_KEY`, `GOOGLE_API_KEY`, `TWILIO_ACCOUNT_SID`,
-`TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `PUBLIC_BASE_URL`, `JUDGE_TOKEN`, `CALLS_ENABLED` (true only for
-"1", "true", "yes"). `.env` is loaded once at import; the environment is read again on each `/api/status` call.
+`TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `PUBLIC_BASE_URL`, `JUDGE_TOKEN`, `CALLS_ENABLED` ("1", "true" or
+"yes"). `app/phone.py` also reads `MY_PHONE_NUMBER` and `SUPERVISOR_PHONE_NUMBER` (owner numbers for limits).
 
-`Settings.status()` returns `{voice, extract, phone, text, replay}`, each `{"ready": bool, "reason": str}`.
-`GET /api/status` in `app/main.py` then replaces `replay` (see the last row):
+`GET /api/status` returns `{voice, extract, phone, text, replay}`, each `{"ready", "reason"}`:
 
 | Feature | Ready when | Reason when not ready |
 |---|---|---|
 | voice | `SARVAM_API_KEY` set | "SARVAM_API_KEY not set" |
-| extract | `GOOGLE_API_KEY` set | "GOOGLE_API_KEY not set: rules-only extraction" |
-| phone | Sarvam key, all three Twilio values, `PUBLIC_BASE_URL` and `CALLS_ENABLED` | "Phone calls off: Twilio keys, PUBLIC_BASE_URL or CALLS_ENABLED not set" |
+| extract | `GOOGLE_API_KEY` set | "GOOGLE_API_KEY not set: rules-only extraction" (grading is rules-only either way; the key enables Gemini answers to questions) |
+| phone | Sarvam key, the three Twilio values, `PUBLIC_BASE_URL` and `CALLS_ENABLED` | "Phone calls off: Twilio keys, PUBLIC_BASE_URL or CALLS_ENABLED not set" |
 | text | always | |
-| replay | a `replays/*.json` file exists (set in `app/main.py`; none exists yet, step 7) | "No recorded test session added yet" |
-
-`JUDGE_TOKEN` is read but not yet used (planned gate for the call button, step 6).
+| replay | a `replays/*.json` file exists (set in `app/main.py`; none yet) | "No recorded test session added yet" |
 
 ## 8. `app/record.py` and the record
 
 ### Ledger
 `Ledger.append(kind, **data)` adds `{"seq": n, "t": unix time rounded to ms, "kind": kind, ...data}` and its hash.
 
-Entry kinds written by `Session`:
-
 | kind | Fields |
 |---|---|
 | `session_start` | `loan_id`, `lang` |
 | `said` | `hi`, `en` |
 | `heard` | `text`, `state`, `target` |
-| `verdict` | `fact`, `status`, `said`, `quote`, `reason` |
-| `case` | `case` (`CALLBACK` or `HOLD_REVIEW`), `detail` |
+| `answered` | `question`, `source` (`fixed` or `gemini`) |
 | `question_for_lender` | `text` |
+| `verdict` | `fact`, `status`, `said` (int for whole amounts), `quote`, `reason` |
+| `case` | `case` (`CALLBACK` or `HOLD_REVIEW`), `detail` |
 | `consent` | `value` (`given` or `declined`), `words` |
 | `session_end` | |
 
@@ -238,7 +225,9 @@ h[0]         = "0" * 64
 h[i]         = sha256_hex( h[i-1] + canon(entry[i]) )   encoded as UTF-8
 seal         = h[last]
 ```
-Changing, reordering, inserting or removing any entry changes every hash after it, so the seal no longer matches.
+Changing, reordering, inserting or removing any entry changes every later hash, so the seal no longer matches.
+Whole amounts are logged as integers, so a copy re-written by the browser's download button (JavaScript writes
+`48410`, not `48410.0`) canonicalises to the same bytes and still verifies.
 
 ### Record (`Session.record()`)
 ```json
@@ -246,129 +235,153 @@ Changing, reordering, inserting or removing any entry changes every hash after i
   "session_id": "12 hex chars",
   "loan_id": "SAMPLE-JLG-50000",
   "language": "hi",
-  "facts": {
-    "cash_in_hand": {"status": "green", "said": 48410, "her_words": "...", "explained_again": 1}
-  },
+  "facts": {"cash_in_hand": {"status": "green", "said": 48410, "her_words": "...", "explained_again": 1}},
   "understood_all": true,
   "right_first_answer": 2,
   "right_after_samjho": 5,
-  "first_answer": {"cash_in_hand": "red", "deductions": "green", "instalment": "amber", "frequency": "red", "total": "green"},
+  "first_answer": {"cash_in_hand": "red", "deductions": "green", "...": "..."},
   "extra_money_reported": false,
   "questions_for_lender": [],
   "consent": "given",
-  "entries": [ ... ledger entries ... ],
+  "entries": ["... ledger entries ..."],
   "seal_sha256": "64 hex chars"
 }
 ```
-`facts` has all five keys. `first_answer` is the status of her first answer about each fact (teach-back or the
-first direct question), before any re-explanation; `right_first_answer` and `right_after_samjho` count greens
-before and after, which is the per-session measure of what Samjho changed (`Session._fact`, `Session.record`;
-test `test_record_counts_first_answers_and_the_result_after_repair`). `extra_money_reported` is `null` if the
-private question was never reached.
-`consent` is `given`, `declined`, `not_started` or `null`.
+`facts` and `first_answer` have all five keys; `first_answer` is the status of her first answer about each fact
+(`green`, `amber`, `red`, `grey`) or `"not asked"`. `right_first_answer` counts facts green on her first answer;
+`right_after_samjho` counts facts green at the end. `extra_money_reported` is `null` if the private question was
+never reached. `consent` is `given`, `declined`, `not_started` or `null`.
 
-The seal covers `entries` only. The summary fields (`facts`, `understood_all`, `consent` and so on) are a
-convenience view; to rely on them, check them against the `verdict`, `case` and `consent` entries.
+The seal covers `entries` only; the summary fields are a convenience view to be checked against the entries.
 
 ### How to verify
-```python
-from app.record import verify
-assert verify(record["entries"], record["seal_sha256"])
 ```
-Without this repository: recompute the chain above in any language and compare the last hash with
-`seal_sha256`.
-
-Number format and browser copies: the canonical form depends on how numbers are written. The parser returns
-floats, and Python writes a whole-number float as `48410.0` while JavaScript writes `48410`. To keep the hash
-stable, `Session._fact()` converts a whole-number `said` to an integer before it is logged, so the record is
-written the same way by Python and by the browser's download button, and the downloaded file verifies. Test:
-`tests/test_flow.py::test_record_amounts_are_integers_so_a_browser_copy_still_verifies` (no floats in the
-entries, and the seal holds after a JSON round trip).
+python scripts/verify_record.py samjho-record-<id>.json     # prints VALID or TAMPERED and the seal
+```
+or `app.record.verify(record["entries"], record["seal_sha256"])`, or recompute the chain above in any language.
 
 ## 9. Event protocol (server to UI)
 
-Typing mode returns events as JSON arrays from the REST API. The browser voice channel sends the same events as
-JSON text messages on `/ws/browser`, between the binary audio messages (step 4, server side in the
-repository). The phone channel's event feed to the panel is Planned (step 6).
+Typing mode returns events as JSON arrays from the REST API. Browser voice sends them as JSON text on
+`/ws/browser`, between binary audio messages. A phone call publishes them to the watch hub, and the browser that
+placed the call receives them on `/ws/watch`. The UI handles all of them in `handleEvent()` (`web/app.js`).
 
 | type | Fields | Producer | UI handling |
 |---|---|---|---|
-| `say` | `text` (in session language), `hi`, `en` | `Session._say` | Bot bubble; English gloss under Hindi |
+| `say` | `text` (session language), `hi`, `en` | `Session._say` | Bot bubble; English gloss under Hindi |
 | `heard` | `text` | `Session.hear` | User bubble |
-| `state` | `state` | `Session._state` | Not rendered yet |
+| `state` | `state` | `Session._state` | Not rendered (voice uses state for turn timing on the server) |
 | `fact` | `fact`, `status` (`green`, `amber`, `red`, `grey`, `unclear`), `said`, `quote`, `reason`, `round` | `Session._fact` | Colours the fact chip, shows her words |
 | `case` | `case` (`CALLBACK`, `HOLD_REVIEW`), `detail` | `Session._case` | Note in the case list |
-| `case` | `case` (`KEY_NOT_SET`, `BUSY`), `detail`; the socket then closes | `/ws/browser` in `app/main.py`; `run_browser_session` in `app/voice.py` | Note in the case list |
-| `record` | `record` (section 8) | `Session._finish` | Record card, JSON download, hides the input |
-| `latency` | `turn`, `ms` (end of speech to first reply audio) | `app/voice.py`, from Pipecat's `UserBotLatencyObserver` | Note in the event list |
-| `clear` | none (wire message, not a UI event) | `BrowserSerializer`, after an interruption | Planned: browser client drops queued audio (step 4) |
+| `case` | `case` (`KEY_NOT_SET`, `BUSY`, `WATCH_UNKNOWN`), `detail`; the socket then closes | `app/main.py`, `app/voice.py` | Note showing the detail |
+| `record` | `record` (section 8) | `Session._finish` | Record card, JSON download |
+| `latency` | `turn`, `ms` (end of her speech to first reply audio) | `app/voice.py`, from Pipecat's `UserBotLatencyObserver` | Note per turn |
+| `call` | `status` (`ringing` with `to` masked, `connected`, `ended`, `not_answered`) | `app/phone.py` | Call status line in `web/phone.js` |
+| `clear` | none (browser wire message) | `BrowserSerializer` after an interruption | `web/voice.js` drops queued audio |
 
-## 10. HTTP endpoints
-
-### Built (`app/main.py`)
+## 10. Endpoints (`app/main.py`)
 
 | Method and path | Request | Response |
 |---|---|---|
 | `GET /healthz` | | `{"ok": true}` |
-| `GET /api/status` | | `Settings.status()` with `replay` set from `replays/` (section 7) |
-| `POST /api/text/start` | `{"lang": "hi" or "en"}` (default `"hi"`) | `{"session_id", "events"}` |
-| `POST /api/text/say` | `{"session_id", "text"}`; text truncated to 500 characters | `{"events", "done"}`; 404 "session expired, start again" if unknown or expired |
-| `GET /` | | `web/index.html` |
-| `GET /static/*` | | Files in `web/` |
-| `WS /ws/browser?lang=hi` (or `en`) | Binary: PCM16 mono 16 kHz audio | Binary: PCM16 mono 16 kHz reply audio. Text: JSON events (section 9). Without `SARVAM_API_KEY`: one `KEY_NOT_SET` case, then close |
+| `GET /api/status` | | Section 7 |
+| `POST /api/text/start` | `{"lang": "hi" or "en"}` | `{"session_id", "events"}` |
+| `POST /api/text/say` | `{"session_id", "text"}`; text truncated to 500 characters | `{"events", "done"}`; 404 "session expired, start again" |
+| `WS /ws/browser?lang=hi` (or `en`) | Binary PCM16 mono 16 kHz audio | Binary PCM16 16 kHz reply audio; JSON events. No Sarvam key: `KEY_NOT_SET`, close. More than 4 live sessions: `BUSY`, close |
+| `POST /api/call` | `{"phone": "+91...", "consent": true, "lang", "k"}` | `{"ok", "watch_id", "call_id" (masked), "to" (masked)}`. Errors: 403 paused (`CALLS_ENABLED` off) or wrong access code; 503 keys not set; 400 no consent or not an Indian mobile; 429 limit reached; 502 Twilio refused |
+| `WS /ws/twilio` | Twilio Media Stream (8 kHz mulaw) carrying the one-time token `t` | Runs the phone session; closes with 1008 on a bad handshake or an unknown, used, expired or mismatched token |
+| `WS /ws/watch?id=<watch_id>` | | The call's events (backlog first, then live), then close. Unknown id: `WATCH_UNKNOWN`, close |
+| `GET /`, `GET /static/*` | | `web/index.html`, files in `web/` |
 
-Sessions: in-memory dict, 30-minute idle expiry (`SESSION_TTL`), at most 200 (`MAX_SESSIONS`), pruned on each
-`/api/text/start`. FastAPI's `/docs` and `/redoc` are disabled.
+Typing sessions: in-memory, 30-minute idle expiry (`SESSION_TTL`), at most 200 (`MAX_SESSIONS`). FastAPI's
+`/docs` and `/redoc` are disabled. Planned: `GET /api/replay` (step 7).
 
-### Planned
+## 11. Voice pipeline: `app/voice.py`, `app/browser_serializer.py`
 
-| Path | Purpose | Step |
+`build_worker(websocket, session, profile, serializer, api_key, publish=None, session_timeout)` builds:
+`transport.input`, `EchoGate`, `SarvamSTTService`, user turn aggregator, `Brain`, `SarvamTTSService`,
+`transport.output`, with `UserBotLatencyObserver` for `latency` events.
+
+| Item | Browser profile (`BROWSER`) | Phone profile (`PHONE`) |
 |---|---|---|
-| `POST /api/call` | Start a call to an Indian mobile, with consent and limits | 6 |
-| `WS /ws/twilio` | Twilio Media Streams (8 kHz) | 6 |
-| `GET /api/replay` | Recorded consented session events for the replay tile | 7 |
+| Entry | `run_browser_session(websocket, lang, api_key)`; at most 4 at once (`MAX_SESSIONS`) | `run_phone_session(...)` from `CallDesk.run_stream`; concurrency bounded by `app/limits.py` (2 calls) |
+| Rate and serializer | 16 kHz, `BrowserSerializer` | 8 kHz, Pipecat `TwilioFrameSerializer` with `auto_hang_up=True` |
+| Speech-to-text | Sarvam `saaras:v4`, `codemix`, key-term hints (hazaar, kisht, bima, hafta, EMI and Devanagari forms) | same |
+| Text-to-speech | Sarvam `bulbul:v4-flash`, voices `kavya_hi_conversational` (Hindi), `ishita_en_customer` (English) | same |
+| Turn end | Silero VAD (confidence 0.7, start 0.2 s, stop 0.2 s); `StateSpeechTimeout`: 0.9 s when a number is expected, 0.6 s in `consent`, `private`, `final_consent` | same |
+| Interruptions | None: `EchoGate` blanks mic audio while the bot speaks plus 0.25 s; `AlwaysUserMuteStrategy` | Allowed: `QuietVADStart` starts a turn on voice only while the bot is silent; while it speaks, `MinWordsUserTurnStartStrategy(min_words=2)` |
+| Amount read-outs | (already half duplex) | `CriticalReadoutMute` mutes, and `EchoGate(only_if=brain.critical)` blanks audio before speech-to-text, while a reply containing an amount (digits, "रुपये", "Rs") plays |
+| Events | Down the pipeline as JSON on the same socket | `publish` to the watch hub, never to Twilio |
+| Time limit | 300 s session timeout | Twilio `time_limit=300`, pipeline timeout 330 s |
 
-## 11. Browser voice channel: `app/voice.py`, `app/browser_serializer.py` (In progress, step 4)
+`Brain`: on start, emits `Session.start()` events; on each final user turn, runs `Session.hear(text)` in a worker
+thread; sends every event; speaks all `say` lines of one reply as one utterance (so the user is not unmuted
+between lines); ends the pipeline after the goodbye. No LLM is called.
 
-Server side is in the repository; the browser microphone client in `web/` is not written yet.
+`BrowserSerializer`: in, binary PCM16 mono 16 kHz (text messages ignored); out, binary PCM16 16 kHz audio, JSON
+text for events, `{"type": "clear"}` after an interruption.
 
-| Item | As written |
+Browser client (`web/voice.js`, `web/mic-worklet.js`): AudioWorklet downsamples the mic to 16 kHz PCM16 in
+20 ms chunks; playback is gapless with a 0.12 s cushion; the mic sends silence while playing and for 0.3 s after.
+
+## 12. Phone: `app/phone.py` and `app/limits.py` (built, live call pending)
+
+`CallDesk.place(number, consent, lang, k, ip)` checks, in order: `CALLS_ENABLED`; Sarvam, Twilio and
+`PUBLIC_BASE_URL` set; `JUDGE_TOKEN` matches `k` if set (constant-time); consent ticked; number matches
+`^\+91[6-9]\d{9}$`; `CallLimiter.reserve()`. Then it creates a one-time token (`secrets.token_urlsafe(24)`) and a
+watch id, opens the watch channel, and calls Twilio `calls.create(to, from_, twiml, time_limit=300, timeout=30)`
+with TwiML `<Connect><Stream url="wss://HOST/ws/twilio"><Parameter name="t" .../>`. If the stream has not
+connected after `TOKEN_TTL = 120` s, the slot is released and the watcher told "not answered".
+
+`run_stream(websocket)`: `parse_telephony_websocket`, then `claim(token, call_sid)`: one use, within 120 s, and
+for the call SID it was issued to. Holds the limit slot for the call, runs `run_phone_session`, releases the slot
+and closes the watch channel at the end.
+
+`WatchHub`: in-process pub/sub per watch id; keeps up to 500 events for late watchers; channels expire after an
+hour.
+
+`client_ip(request)`: the socket address; `CF-Connecting-IP` or `X-Forwarded-For` only when the request comes
+from loopback (a local tunnel).
+
+`CallLimiter` (all in memory, reset on restart):
+
+| Limit | Value |
 |---|---|
-| Entry | `run_browser_session(websocket, lang, api_key)`, called by `/ws/browser`. Pipecat is imported only there, so typing mode starts without loading it |
-| Limits | `MAX_SESSIONS = 4` live sessions (else a `BUSY` case and close); `SESSION_TIMEOUT_SECS = 300`; disconnect or timeout cancels the pipeline |
-| Pipeline | `transport.input`, `EchoGate`, `SarvamSTTService`, user turn aggregator, `Brain`, `SarvamTTSService`, `transport.output` |
-| Speech-to-text | Sarvam `saaras:v4`, mode `codemix`, 16 kHz, key-term hints (hazaar, kisht, bima, hafta, EMI and Devanagari forms) |
-| Text-to-speech | Sarvam `bulbul:v4-flash`, voices `kavya_hi_conversational` (Hindi) and `ishita_en_customer` (English) |
-| Turn end | Silero VAD (confidence 0.7, start 0.2 s, stop 0.2 s); `StateSpeechTimeout`: 0.9 s of silence for answers with numbers, 0.6 s in `consent`, `private` and `final_consent` |
-| Half duplex | The browser is to send silence while playing; `EchoGate` zeroes mic audio while the bot speaks and for 0.25 s after; `AlwaysUserMuteStrategy` drops turns in that window |
-| `Brain` | On start: emits `Session.start()` events. On each final user turn: `Session.hear(text)`; sends every event as a JSON message and every `say` line to TTS; ends the pipeline after the goodbye when the session is done. No LLM is called |
-| Latency | `UserBotLatencyObserver` `on_latency_measured` becomes `{"type": "latency", "turn", "ms"}` |
-| Wire format (`BrowserSerializer`) | In: binary PCM16 mono 16 kHz (text messages ignored). Out: binary PCM16 16 kHz audio; JSON text for events; `{"type": "clear"}` after an interruption |
+| Per number | 1 call per 30 min, 3 per 24 h, keyed by an HMAC-SHA256 of the number with a random per-process salt |
+| Per IP | 3 calls per hour |
+| Global | 2 calls at once (a ringing call holds its slot 90 s; a connected call holds it for the call), 40 per 24 h |
+| Owner numbers | `MY_PHONE_NUMBER`, `SUPERVISOR_PHONE_NUMBER` skip the per-number and per-IP limits, not the global ones |
 
-## 12. Planned interfaces for modules not yet present
+Logs show numbers masked (`+91XXXXXX1234`) and call SIDs shortened.
 
-### `app/extract.py` (step 5)
-- `extract(text, loan, target) -> dict[str, Evidence] | None`: Gemini returns JSON assignments of her numbers
-  to facts, with her quoted words. Timeout 1.5 s; on timeout, error or missing key, return `None` and use
-  `assign()`. Its output goes through `judge()`; it never sets a status.
+## 13. Evaluation and scripts
 
-### `app/limits.py` (step 6)
-- Number rule `^\+91[6-9]\d{9}$`; per-number cooldown; per-IP and global limits; call time cap; reads
-  `CALLS_ENABLED` per request; phone numbers kept only as salted hashes.
+`eval/run_eval.py`: each line of an `eval/*.jsonl` file is `{"text", "target", "expect": {fact: status},
+"source"}`. It grades every line and reports phrases, checks, accuracy, false passes (green when the expected
+status is not green) and false fails; exits 1 on any false pass. `eval/synthetic.jsonl`: 53 phrases written by us
+in Hindi, Devanagari, Hinglish, English and digits. Current result: 71 of 71 checks right, 0 false passes. Field
+phrases from consented sessions go in a separate file with `"source": "field"` (Planned, step 7).
 
-## 13. Test map
+Run: `python -m eval.run_eval`.
 
-| File | Covers |
-|---|---|
-| `tests/test_app.py` | No-keys start: `/healthz`, main screen, static JS (`test_health_and_main_screen_without_keys`); status names missing keys, keeps text on and reports a replay state (`test_status_names_missing_keys_and_keeps_text_and_replay_on`); status never echoes a key value (`test_status_never_echoes_a_key`) |
-| `tests/test_hi_numbers.py` (544 cases) | Every word 0 to 99 in romanised and Devanagari Hindi; spelling variants; composition (hazaar, lakh, saade, sava, paune, dedh, dhai, digits); separating adjacent numbers; no numbers and fail closed; confusion-pair flags and confident numbers; spans map back to the raw text; realistic code-mixed sentences; frequency, count and duration; `normalize` keeps length; round trip with `app/numwords.py`; no em dashes in the module |
-| `tests/test_source_hygiene.py` | No control characters (a scripted edit once turned the regex `\b` into a backspace byte) and no em dashes in any `.py`, `.js`, `.html`, `.css` or `.md` file under `app/`, `web/`, `tests/` and `docs/` |
-| `tests/test_flow.py`, yes/no | 12 parametrised cases including Devanagari and "first answer wins" (`test_yes_no`) |
-| `tests/test_flow.py`, grading | Classic miss in her words: 50,000 red, monthly red, 1,000 amber (`test_classic_miss_is_caught_in_her_words`); full correct Hinglish teach-back all green (`test_correct_teachback_is_all_green`); bare number answers the asked fact, "pata nahi" stays grey (`test_bare_number_answers_the_question_asked`); one deduction amber (`test_one_deduction_only_is_amber`); "52 hafte" not read as rupees (`test_week_count_is_not_read_as_rupees`); "aur" splits clauses so each number gets its own cue (`test_aur_splits_clauses_so_each_number_gets_its_own_cue`) |
-| `tests/test_flow.py`, conversation | Happy path seals a verifiable record (`test_happy_path_seals_a_verifiable_record`); repair quotes her words and rechecks with a fresh question (`test_miss_is_repaired_then_rechecked_with_a_fresh_question`); two failed rounds give UNCLEAR and CALLBACK (`test_two_failed_rounds_hand_over_to_a_human_and_never_block`); extra-money yes gives HOLD_REVIEW (`test_extra_money_report_creates_a_hold_for_the_grievance_officer`); FAQ answer during explain (`test_question_during_explanation_gets_a_fixed_answer`); unknown question logged for the lender (`test_unknown_question_is_passed_to_the_lender_not_guessed`); "no" at the start ends politely with a record (`test_saying_no_at_the_start_ends_politely`); English mode (`test_english_mode_speaks_english`); tampering breaks the seal (`test_tampering_with_the_log_breaks_the_seal`); amounts stored as integers so a browser copy verifies (`test_record_amounts_are_integers_so_a_browser_copy_still_verifies`) |
-| `.github/workflows/ci.yml` | `pytest` on every push and pull request; fresh-clone `docker compose up` with no keys, `/healthz`, main screen, "SARVAM_API_KEY not set" |
-| Planned | Voice channel tests (step 4); eval harness over phrase fixtures reporting accuracy, false passes and P50/P95 latency (step 9) |
+Scripts (need keys; not in CI): `scripts/verify_record.py` (seal check); `scripts/voice_smoke.py` (plays
+Sarvam-made Hindi answers into a local server over a real WebSocket, prints per-turn latency);
+`scripts/call_smoke.py` (live call to `MY_PHONE_NUMBER`, or `--simulate`: the real `/api/call`, TwiML,
+`/ws/twilio` and `/ws/watch` with live Sarvam speech, faking only Twilio's dialler and the handset).
 
-At the time of writing: 577 tests (544 parser, 28 flow and grading, 3 app, 2 hygiene), all passing.
+## 14. Test map (630 tests)
+
+| File | Count | Covers |
+|---|---|---|
+| `tests/test_hi_numbers.py` | 544 | Every word 0 to 99 in both scripts; spelling variants; composition; separating adjacent numbers; fail closed; confusion flags; spans; code-mixed sentences; frequency, count, duration; `normalize`; round trip with `app/numwords.py`; no em dashes |
+| `tests/test_flow.py` | 38 | Yes/no (12 cases); classic miss red; correct teach-back all green; bare number answers the asked fact; one deduction amber; "52 hafte" not rupees; "aur" splits clauses; schedule quoted in her words; happy path seals a verifiable record; repair quotes her words and rechecks; two failed rounds give UNCLEAR and CALLBACK; HOLD_REVIEW; FAQ answer; unknown question noted for the lender; "no" at the start; English mode; tampering breaks the seal; integer amounts so a browser copy verifies; first-answer and after-Samjho counts; real questions get real answers (6 cases from the first real-mic test); move on after three questions; Gemini answers may only use the loan's numbers |
+| `tests/test_phone.py` | 36 | Number rule and masking; TwiML; per-number, per-IP, concurrency, daily and owner limits; salted hashes; refusal without keys; kill switch per request; access code; consent; call placed with limits and watch id; Twilio error releases the slot; 429; token claimed once, for its own call, and expiry; bad token rejected; watch hub backlog and live events; `/ws/watch`; `Brain` publishes to the hub and flags amount replies; read-out mute and quiet VAD start; phone pipeline builds offline at 8 kHz |
+| `tests/test_voice.py` | 6 | Serializer in and out; `/ws/browser` refuses politely without a key; turn timeout follows the session state; `Brain` speaks one utterance per reply and ends when done |
+| `tests/test_app.py` | 3 | No-keys start and main screen; status names missing keys; status never echoes a key |
+| `tests/test_eval.py` | 1 | At least 50 phrases, 0 false passes, accuracy at least 95% |
+| `tests/test_source_hygiene.py` | 2 | No control characters and no em dashes in `app/`, `web/`, `tests/`, `docs/` |
+| `tests/conftest.py` | | Removes `GOOGLE_API_KEY` so tests never call Gemini |
+| `.github/workflows/ci.yml` | | `pytest` on every push and pull request; fresh-clone `docker compose up` with no keys |
+| Planned | | Field phrases in the eval (step 7); a live-call test once Twilio is set up (step 6) |
 
 Run: `python -m pytest -q`.
