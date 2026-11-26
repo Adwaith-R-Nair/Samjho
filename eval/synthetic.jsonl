@@ -1,0 +1,53 @@
+{"text": "haath mein adtaalis hazaar chaar sau das aayenge, har hafte ek hazaar pachaanve bharna hai, kul chhappan hazaar nau sau chaalis", "target": null, "expect": {"cash_in_hand": "green", "instalment": "green", "frequency": "green", "total": "green"}, "source": "synthetic"}
+{"text": "pachaas hazaar haath mein aayenge aur har mahine hazaar rupaye bharne hain", "target": null, "expect": {"cash_in_hand": "red", "instalment": "amber", "frequency": "red"}, "source": "synthetic"}
+{"text": "mujhe pachaas hazaar milenge, har hafte gyarah sau dena hai", "target": null, "expect": {"cash_in_hand": "red", "instalment": "green", "frequency": "green"}, "source": "synthetic"}
+{"text": "48 hazaar 410 milenge, 1590 kat jaayega, har hafte 1095, kul 56940", "target": null, "expect": {"cash_in_hand": "green", "deductions": "green", "instalment": "green", "frequency": "green", "total": "green"}, "source": "synthetic"}
+{"text": "हाथ में अड़तालीस हज़ार चार सौ दस आएंगे, हर हफ्ते एक हज़ार पचानवे भरने हैं", "target": null, "expect": {"cash_in_hand": "green", "instalment": "green", "frequency": "green"}, "source": "synthetic"}
+{"text": "हाथ में पचास हज़ार आएंगे, हर महीने हज़ार रुपये", "target": null, "expect": {"cash_in_hand": "red", "frequency": "red"}, "source": "synthetic"}
+{"text": "I will get forty eight thousand four hundred ten, and pay one thousand ninety five every week", "target": null, "expect": {"cash_in_hand": "green", "instalment": "green", "frequency": "green"}, "source": "synthetic"}
+{"text": "I get fifty thousand and pay a thousand every month", "target": null, "expect": {"cash_in_hand": "red", "frequency": "red"}, "source": "synthetic"}
+{"text": "ek hazaar fee aur paanch sau nabbe bima katega, baaki haath mein aayega", "target": null, "expect": {"deductions": "green"}, "source": "synthetic"}
+{"text": "sirf ek hazaar fee katega", "target": null, "expect": {"deductions": "amber"}, "source": "synthetic"}
+{"text": "kul milakar pachaas hazaar wapas karna hai", "target": null, "expect": {"total": "amber"}, "source": "synthetic", "note": "pachaas could be pachpan (55,000, amber); the readings disagree, so Samjho asks again"}
+{"text": "kul sattavan hazaar wapas karne hain", "target": null, "expect": {"total": "green"}, "source": "synthetic"}
+{"text": "kul saath hazaar lautana hai", "target": null, "expect": {"total": "amber"}, "source": "synthetic"}
+{"text": "haath mein saade adtaalis hazaar aayenge", "target": null, "expect": {"cash_in_hand": "green"}, "source": "synthetic"}
+{"text": "haath mein lagbhag adtalis hajar aayenge", "target": null, "expect": {"cash_in_hand": "green"}, "source": "synthetic"}
+{"text": "haath mein chaalis hazaar aayenge", "target": null, "expect": {"cash_in_hand": "red"}, "source": "synthetic"}
+{"text": "har hafte hazaar rupaye", "target": null, "expect": {"instalment": "amber", "frequency": "green"}, "source": "synthetic"}
+{"text": "har hafte barah sau rupaye", "target": null, "expect": {"instalment": "amber", "frequency": "green"}, "source": "synthetic"}
+{"text": "har hafte do hazaar dena hai", "target": null, "expect": {"instalment": "red", "frequency": "green"}, "source": "synthetic"}
+{"text": "pandrah din mein ek baar 1095", "target": null, "expect": {"frequency": "red"}, "source": "synthetic"}
+{"text": "haan ji samajh gayi", "target": null, "expect": {}, "source": "synthetic"}
+{"text": "adtaalis hazaar chaar sau das", "target": "cash_in_hand", "expect": {"cash_in_hand": "green"}, "source": "synthetic"}
+{"text": "48410", "target": "cash_in_hand", "expect": {"cash_in_hand": "green"}, "source": "synthetic"}
+{"text": "₹48,410", "target": "cash_in_hand", "expect": {"cash_in_hand": "green"}, "source": "synthetic"}
+{"text": "पचास हज़ार", "target": "cash_in_hand", "expect": {"cash_in_hand": "red"}, "source": "synthetic"}
+{"text": "pachaas hazaar", "target": "cash_in_hand", "expect": {"cash_in_hand": "red"}, "source": "synthetic"}
+{"text": "pata nahi", "target": "cash_in_hand", "expect": {"cash_in_hand": "grey"}, "source": "synthetic"}
+{"text": "yaad nahi", "target": "total", "expect": {"total": "grey"}, "source": "synthetic"}
+{"text": "pandrah sau nabbe", "target": "deductions", "expect": {"deductions": "green"}, "source": "synthetic"}
+{"text": "1590", "target": "deductions", "expect": {"deductions": "green"}, "source": "synthetic"}
+{"text": "hazaar", "target": "deductions", "expect": {"deductions": "amber"}, "source": "synthetic"}
+{"text": "paanch sau nabbe", "target": "deductions", "expect": {"deductions": "amber"}, "source": "synthetic"}
+{"text": "das hazaar", "target": "deductions", "expect": {"deductions": "red"}, "source": "synthetic"}
+{"text": "ek hazaar pachaanve", "target": "instalment", "expect": {"instalment": "green"}, "source": "synthetic"}
+{"text": "gyarah sau", "target": "instalment", "expect": {"instalment": "green"}, "source": "synthetic"}
+{"text": "1095 rupaye", "target": "instalment", "expect": {"instalment": "green"}, "source": "synthetic"}
+{"text": "hazaar", "target": "instalment", "expect": {"instalment": "amber"}, "source": "synthetic"}
+{"text": "paanch hazaar", "target": "instalment", "expect": {"instalment": "red"}, "source": "synthetic"}
+{"text": "har hafte", "target": "frequency", "expect": {"frequency": "green"}, "source": "synthetic"}
+{"text": "hafte mein ek baar", "target": "frequency", "expect": {"frequency": "green"}, "source": "synthetic"}
+{"text": "agle hafte", "target": "frequency", "expect": {"frequency": "green"}, "source": "synthetic"}
+{"text": "agle somvar", "target": "frequency", "expect": {}, "source": "synthetic"}
+{"text": "har mahine", "target": "frequency", "expect": {"frequency": "red"}, "source": "synthetic"}
+{"text": "mahine nahi, har hafte", "target": "frequency", "expect": {"frequency": "green"}, "source": "synthetic"}
+{"text": "weekly", "target": "frequency", "expect": {"frequency": "green"}, "source": "synthetic"}
+{"text": "monthly", "target": "frequency", "expect": {"frequency": "red"}, "source": "synthetic"}
+{"text": "chhappan hazaar nau sau chaalis", "target": "total", "expect": {"total": "green"}, "source": "synthetic"}
+{"text": "56,940", "target": "total", "expect": {"total": "green"}, "source": "synthetic"}
+{"text": "sattavan hazaar", "target": "total", "expect": {"total": "green"}, "source": "synthetic"}
+{"text": "pachaas hazaar", "target": "total", "expect": {"total": "amber"}, "source": "synthetic", "note": "pachaas could be pachpan (55,000, amber); the readings disagree, so Samjho asks again"}
+{"text": "saath hazaar", "target": "total", "expect": {"total": "amber"}, "source": "synthetic"}
+{"text": "pachpan hazaar", "target": "total", "expect": {"total": "amber"}, "source": "synthetic"}
+{"text": "fifty six thousand nine hundred forty", "target": "total", "expect": {"total": "green"}, "source": "synthetic"}

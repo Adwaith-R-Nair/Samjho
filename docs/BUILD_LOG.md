@@ -106,5 +106,15 @@ her words "har mahine". The schedule is now quoted in her words (`_freq_quote`, 
 New: each record counts what she got right on her first answer and what she got right after Samjho (in that run:
 2 of 5, then 5 of 5). This is the per-session result the video and deck will report from real test sessions.
 
+### Commit 6: an evaluation harness that counts false passes
+`eval/run_eval.py` grades a fixed set of answers and reports accuracy and, above all, false passes (a fact
+marked understood when it was not). `eval/synthetic.jsonl` holds 53 answers we wrote (teach-backs and direct
+answers in Hindi, Devanagari, Hinglish, English and digits, right and wrong). First run: 69 of 71 checks right,
+0 false passes. Both misses were our expectations, not the grader: for the total, "pachaas hazaar" could be
+"pachpan hazaar" (55,000, which is only close), so the two readings give different verdicts and Samjho correctly
+asks again instead of marking it wrong. After correcting those two: 71 of 71. A test fails the build on any false
+pass. Honest limit: a set we wrote ourselves says little about real speech; phrases heard in consented field
+sessions go into a separate `field` file with their source marked.
+
 ### In progress
 - Browser voice channel on Pipecat with Sarvam speech-to-text and text-to-speech, built in parallel by a subagent.
