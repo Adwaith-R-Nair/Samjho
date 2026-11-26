@@ -41,7 +41,17 @@
           <em class="state" data-for="replay"></em>
         </button>
       </div>
+      <div class="langs" role="radiogroup" aria-label="Language">
+        <span class="muted">Language:</span>
+        <label><input type="radio" name="lang" value="hi" checked> हिंदी</label>
+        <label><input type="radio" name="lang" value="en"> English</label>
+      </div>
+      <p class="hint muted" id="hint" hidden>Tip: when asked to explain the loan back, try saying the wrong amount, like "pachaas hazaar haath mein aayenge", and watch Samjho catch it.</p>
       <div class="transcript" id="transcript" aria-live="polite"></div>
+      <form class="say" id="say" hidden>
+        <input id="sayText" autocomplete="off" placeholder="Type her answer, in Hindi, Hinglish or English" aria-label="Your answer">
+        <button type="submit">Send</button>
+      </form>
     </section>
 
     <section class="card panel" aria-label="What Samjho checked">
@@ -54,6 +64,7 @@
         <li class="fact" data-fact="total"><span class="label">Total to repay</span><span class="truth">Rs 56,940</span><span class="said"></span></li>
       </ul>
       <div class="events" id="events"></div>
+      <div class="record" id="record" hidden></div>
     </section>
   </main>
 

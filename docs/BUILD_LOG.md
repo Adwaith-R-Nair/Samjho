@@ -57,9 +57,41 @@ five facts. `/api/status` names the missing key for each feature and never retur
 starts it with no `.env`; a CI job does exactly that from a fresh clone and checks the screen and the "not set"
 message. Three tests.
 
+### Commit 2: docs, build log and Flow log
+This file and FLOW_LOG.md.
+
+### Commit 3: reading numbers from Hindi, Hinglish and English speech
+`app/hi_numbers.py`, built by a parallel agent against a fixed interface, with 544 table-driven tests: every
+number 0 to 99 in both scripts with spelling variants, compositions ("adtaalis hazaar chaar sau das" is 48,410),
+dedh, dhai, saade, sava and paune, English words, digits in any grouping, and separation of adjacent numbers.
+Words that phone audio often swaps (pachaas and pachpan, sattar and satrah, fifteen and fifty) come back flagged
+with the other reading. Known limits are listed in the module docstring (for example "aur" never joins numbers).
+
+### Commit 4: the conversation, the five checks and the sealed record, in typing mode
+`app/flow.py` runs consent, explanation with questions, teach-back, ask-repair-recheck for each fact that is not
+right (two rounds, then a human callback, never a block), the private extra-money question and spoken consent.
+`app/grade.py` assigns each number to a fact from the words around it and judges it in code against
+`app/loan.py`. `app/record.py` chains every entry with SHA-256; the seal is the last hash. The UI shows the
+conversation with English subtitles, turns each fact chip green, amber or red with her own words, and offers the
+sealed record as a download.
+
+Bugs found and fixed before this commit (all now covered by tests):
+1. **Unclear words turned right answers amber.** Once the parser flagged "pachaas" (could be pachpan), the grader
+   made every flagged number amber, so a correct teach-back never went fully green and the classic miss of
+   Rs 50,000 showed amber, not red. Fix: a flagged word only matters if the other reading would change the
+   verdict; 50,000 and 55,000 are both wrong, so it is red.
+2. **Numbers matched to the wrong fact.** In "har hafte 1095 dena hai, kul 56,940", the word "kul" (total) was
+   the nearest cue to 1095, so the instalment was judged as a total. Fix: cue words only count inside the same
+   clause (split on commas, "aur", "phir", danda), and "har hafte", "dena" and "bharne" now mark an instalment.
+3. **A scripted edit wrote a backspace byte instead of the regex `\b`.** Clause splitting on "aur" silently did
+   nothing while tests still passed. Found by printing the compiled pattern. Fix, plus a new test that fails if
+   any source file contains a control character (and one for em dashes).
+4. **The question "bima kyun lagta hai?" got no answer.** The pattern was `bee?ma` and missed "bima". Fixed.
+5. **A downloaded record would not verify.** Amounts were stored as floats (48410.0); a browser re-writing the
+   JSON prints 48410, which changes the hash. Found by the docs agent while writing the LLD. Fix: whole amounts are
+   stored as integers; a test re-serialises the record and checks the seal.
+6. **The replay tile was clickable with nothing behind it.** Replay now reports "not ready" until a consented
+   real session is added under `replays/`.
+
 ### In progress
-- Conversation state machine (`app/flow.py`), deterministic grading (`app/grade.py`), all spoken lines in Hindi
-  and English (`app/lines.py`), amounts spoken as Hindi words (`app/numwords.py`), hash-chained session log and
-  sealed record (`app/record.py`), typing mode in the UI.
-- Hindi/Hinglish number parser with 150+ tests (`app/hi_numbers.py`), built in parallel by a subagent.
 - Browser voice channel on Pipecat with Sarvam speech-to-text and text-to-speech, built in parallel by a subagent.

@@ -77,3 +77,21 @@ h2 { margin: 0 0 8px; font-size: 18px; }
   max-width: 1200px; margin: 0 auto; padding: 8px 24px 24px;
   display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 13px;
 }
+.langs { display: flex; gap: 14px; align-items: center; margin-top: 12px; font-size: 14px; }
+.hint { margin: 10px 0 0; }
+.bubble { max-width: 88%; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); }
+.bubble.bot { align-self: flex-start; background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+.bubble.user { align-self: flex-end; background: color-mix(in srgb, var(--green) 10%, var(--card)); }
+.bubble .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.say { display: flex; gap: 8px; margin-top: 12px; }
+.say input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: inherit; font: inherit; }
+.say button, .record button { padding: 10px 16px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+.fact.unclear { border-left-color: var(--amber); border-left-style: dashed; }
+.event.case { color: var(--red); font-weight: 600; }
+.record { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 14px; }
+.record h3 { margin: 0 0 6px; font-size: 16px; }
+.record ul { padding-left: 18px; margin: 6px 0; }
+.record li.green { color: var(--green); }
+.record li.red, .record li.unclear { color: var(--red); }
+.record li.amber { color: var(--amber); }
+.seal code { word-break: break-all; font-size: 12px; }

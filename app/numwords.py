@@ -1,0 +1,37 @@
+"""Write rupee amounts as Hindi words in Devanagari, so the voice says them the way people do."""
+
+_ONES = (
+    "शून्य एक दो तीन चार पाँच छह सात आठ नौ दस ग्यारह बारह तेरह चौदह पंद्रह सोलह सत्रह अठारह उन्नीस "
+    "बीस इक्कीस बाईस तेईस चौबीस पच्चीस छब्बीस सत्ताईस अट्ठाईस उनतीस तीस इकतीस बत्तीस तैंतीस चौंतीस "
+    "पैंतीस छत्तीस सैंतीस अड़तीस उनतालीस चालीस इकतालीस बयालीस तैंतालीस चवालीस पैंतालीस छियालीस "
+    "सैंतालीस अड़तालीस उनचास पचास इक्यावन बावन तिरपन चौवन पचपन छप्पन सत्तावन अट्ठावन उनसठ साठ इकसठ "
+    "बासठ तिरसठ चौंसठ पैंसठ छियासठ सड़सठ अड़सठ उनहत्तर सत्तर इकहत्तर बहत्तर तिहत्तर चौहत्तर पचहत्तर "
+    "छिहत्तर सतहत्तर अठहत्तर उन्यासी अस्सी इक्यासी बयासी तिरासी चौरासी पचासी छियासी सत्तासी अट्ठासी "
+    "नवासी नब्बे इक्यानवे बानवे तिरानवे चौरानवे पचानवे छियानवे सत्तानवे अट्ठानवे निन्यानवे"
+).split()
+
+assert len(_ONES) == 100
+
+
+def hindi_words(n: int) -> str:
+    """48410 -> 'अड़तालीस हज़ार चार सौ दस'. Uses the Indian system (hazaar, lakh, crore)."""
+    if n < 0:
+        raise ValueError("negative amounts are not spoken")
+    if n < 100:
+        return _ONES[n]
+    parts = []
+    for size, word in ((10_000_000, "करोड़"), (100_000, "लाख"), (1_000, "हज़ार"), (100, "सौ")):
+        if n >= size:
+            parts.append(f"{hindi_words(n // size)} {word}")
+            n %= size
+    if n:
+        parts.append(_ONES[n])
+    return " ".join(parts)
+
+
+def rupees_hi(n: int) -> str:
+    return f"{hindi_words(n)} रुपये"
+
+
+def rupees_en(n: int) -> str:
+    return f"Rs {n:,}".replace(",", ",")
