@@ -173,6 +173,16 @@ function startBrowserVoice() {
 }
 document.querySelector('.tile[data-mode="browser"]').addEventListener("click", () => startBrowserVoice().catch((e) => note(e.message, "case")));
 
+// Real phone call (web/phone.js): the call's events arrive over /ws/watch and go through handleEvent.
+window.samjhoLang = lang;
+window.samjhoReset = () => {
+  resetPanel();
+  sessionId = null;
+  $("say").hidden = true;
+  $("hint").hidden = false;
+};
+document.querySelector('.tile[data-mode="phone"]').addEventListener("click", () => window.samjhoPhone.open());
+
 loadStatus().catch(() => {
   $("keys").textContent = "Could not reach the server.";
 });

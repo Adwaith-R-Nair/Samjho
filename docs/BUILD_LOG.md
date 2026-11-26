@@ -179,5 +179,34 @@ Problems met on the way:
   hand. Scripted multi-line edits are now done with the editor instead.
 - Tests never call Gemini, even with a key in `.env` (`tests/conftest.py`).
 
+### Commit 10: the real phone call, built and proven in a simulated call
+`app/phone.py`, `app/limits.py`, `web/phone.js`: "Get a real phone call" places a Twilio call to an Indian mobile
+and runs the same Session on it. One pipeline builder now serves both channels (`app/voice.py`): the phone runs at
+8 kHz end to end with Twilio's serializer, and because the handset cancels echo, the caller can interrupt; two or
+more words are needed while Samjho speaks, so "haan" or "hmm" do not cut it off. While a reply with amounts plays,
+the caller is muted so the numbers are heard in full. The browser that asked for the call watches it live over
+`/ws/watch`.
+
+Protection for a public link (`app/limits.py`): consent checkbox, Indian mobiles only, per number 1 call per 30
+minutes and 3 a day (stored only as a salted hash), 3 per IP per hour, 2 at once and 40 a day overall, a
+`CALLS_ENABLED` switch read on every request, an optional `JUDGE_TOKEN`, and a one-time token on the Twilio stream
+so nobody else can attach to a call. Calls end after 5 minutes. Numbers appear in logs only masked.
+
+Proof so far: no Twilio account yet, so `scripts/call_smoke.py --simulate` runs a whole call locally with live
+Sarvam speech through the real `/api/call`, TwiML, `/ws/twilio` and `/ws/watch`, faking only Twilio's dialler and
+the handset (8 kHz, 20 ms frames, real time). It passed: barge-in, muting during amounts, "50,000 हाथ में" caught
+red, the watch panel saw every event; replies in 1.03, 1.36 and 1.34 s. 36 new tests.
+
+Problems met:
+1. Pipecat's Twilio serializer forwards UI messages to Twilio. Events now go to an in-process watch hub instead.
+2. Speech muted while amounts were read sat in the speech-to-text buffer and leaked into the next turn's
+   transcript. The mute flag now also silences the audio going into speech-to-text.
+3. Questions that wait on Gemini could block the audio loop for up to 3 s. `Session.hear()` now runs in a thread.
+4. The 4-minute call limit was shorter than a full session with repairs; raised to 5 minutes.
+Not yet proven, and planned for the first real call: hang-up via Twilio's API, real network audio, the
+"International Call" label, and how fast barge-in feels on a real line (about 1 s in the simulation).
+
 ### In progress
-- Real phone call channel (Twilio), once the paid account is set up.
+- First real phone call, once the Twilio account is paid.
+- Hosted live link on Railway.
+- Consented real test sessions and replays.

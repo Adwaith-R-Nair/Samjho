@@ -1,13 +1,15 @@
 """Samjho web server: serves the one-screen UI and the API it talks to."""
 
 import time
+from contextlib import aclosing
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app import phone
 from app.config import load_settings
 from app.flow import Session
 
@@ -80,6 +82,49 @@ async def ws_browser(websocket: WebSocket, lang: str = "hi") -> None:
     from app.voice import run_browser_session  # imported here so text mode starts without loading Pipecat
 
     await run_browser_session(websocket, lang, key)
+
+
+class CallIn(BaseModel):
+    phone: str
+    consent: bool = False
+    lang: str = "hi"
+    k: str = ""
+
+
+@app.post("/api/call")
+async def api_call(body: CallIn, request: Request) -> dict:
+    """Places one demo call (see app/phone.py for the checks). Returns a watch id for /ws/watch."""
+    try:
+        return await phone.desk().place(
+            body.phone.strip().replace(" ", ""), body.consent, body.lang, body.k, phone.client_ip(request)
+        )
+    except phone.CallRefused as e:
+        raise HTTPException(e.status, e.message) from None
+
+
+@app.websocket("/ws/twilio")
+async def ws_twilio(websocket: WebSocket) -> None:
+    """Twilio Media Stream for a call placed by /api/call; rejected without its one-time token."""
+    await websocket.accept()
+    await phone.desk().run_stream(websocket)
+
+
+@app.websocket("/ws/watch")
+async def ws_watch(websocket: WebSocket, id: str = "") -> None:
+    """Follows a phone call live: sends the call's UI events as JSON, then closes when the call ends."""
+    await websocket.accept()
+    hub = phone.desk().hub
+    if not hub.exists(id):
+        await websocket.send_json({"type": "case", "case": "WATCH_UNKNOWN", "detail": "No such call, or it expired"})
+        await websocket.close()
+        return
+    try:
+        async with aclosing(hub.subscribe(id)) as events:
+            async for ev in events:
+                await websocket.send_json(ev)
+        await websocket.close()
+    except Exception:  # the watcher left; the call goes on
+        pass
 
 
 @app.get("/")
