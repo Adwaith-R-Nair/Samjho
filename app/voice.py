@@ -45,6 +45,7 @@ from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
@@ -63,6 +64,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from app.browser_serializer import WIRE_RATE, BrowserSerializer
 from app.flow import Session
+from app.recording import Recorder
 
 STT_MODEL = "saaras:v4"
 TTS_MODEL = "bulbul:v4-flash"
@@ -192,11 +194,13 @@ class Brain(FrameProcessor):
     to run an LLM. There is no LLM here: the text goes to Session.hear() and the context frame is dropped.
 
     Events go to `publish` when given (phone: the watch hub), otherwise down the pipeline to the browser.
+    With a recorder (consented demo replay), every event is also kept with its time.
     """
 
-    def __init__(self, session: Session, publish: Publish | None = None) -> None:
+    def __init__(self, session: Session, publish: Publish | None = None, recorder: Recorder | None = None) -> None:
         super().__init__()
         self.session = session
+        self.recorder = recorder
         self.turn = 0
         self.critical = False
         self._publish = publish
@@ -225,6 +229,8 @@ class Brain(FrameProcessor):
         await self._emit(await asyncio.to_thread(self.session.hear, text))
 
     async def send_event(self, ev: dict) -> None:
+        if self.recorder is not None:
+            self.recorder.event(ev)
         if self._publish is None:
             # Not urgent on purpose: the TTS queues it behind any audio still playing, so events stay in order.
             await self.push_frame(OutputTransportMessageFrame(message=ev))
@@ -258,6 +264,7 @@ def build_worker(
     api_key: str,
     publish: Publish | None = None,
     session_timeout: int = SESSION_TIMEOUT_SECS,
+    recorder: Recorder | None = None,
 ) -> tuple[PipelineWorker, Brain]:
     lang = session.lang
     rate = profile.sample_rate
@@ -286,7 +293,7 @@ def build_worker(
     vad = SileroVADAnalyzer(
         sample_rate=rate, params=VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.2, min_volume=0.6)
     )
-    brain = Brain(session, publish)
+    brain = Brain(session, publish, recorder)
 
     if profile.half_duplex:
         strategies = UserTurnStrategies(stop=[StateSpeechTimeout(session)])
@@ -309,7 +316,21 @@ def build_worker(
 
     gate = EchoGate() if profile.half_duplex else EchoGate(tail_secs=0.0, only_if=lambda: brain.critical)
     head = [transport.input(), gate]
-    pipeline = Pipeline([*head, stt, aggregators.user(), brain, tts, transport.output()])
+    tail = []
+    if recorder is not None:
+        # After the output, so it hears both sides: the user's audio as it came in, Samjho's as it was sent.
+        audio = AudioBufferProcessor(sample_rate=rate, num_channels=1, auto_start_recording=True)
+
+        @audio.event_handler("on_recording_started")
+        async def on_recording_started(_processor) -> None:
+            recorder.restart_clock()
+
+        @audio.event_handler("on_audio_data")
+        async def on_audio_data(_processor, pcm: bytes, sample_rate: int, _channels: int) -> None:
+            recorder.add_audio(pcm, sample_rate)
+
+        tail = [audio]
+    pipeline = Pipeline([*head, stt, aggregators.user(), brain, tts, transport.output(), *tail])
 
     latency = UserBotLatencyObserver()
     worker = PipelineWorker(
@@ -325,6 +346,8 @@ def build_worker(
         logger.info(f"Samjho {profile.name} turn {brain.turn}: {ms} ms end of speech to first bot audio")
         ev = {"type": "latency", "turn": brain.turn, "ms": ms}
         if publish is None:
+            if recorder is not None:
+                recorder.event(ev)
             await worker.queue_frame(OutputTransportMessageUrgentFrame(message=ev))
         else:
             await brain.send_event(ev)
@@ -346,8 +369,19 @@ async def run_worker(worker: PipelineWorker) -> None:
     await runner.run()
 
 
-async def run_browser_session(websocket: WebSocket, lang: str, api_key: str) -> None:
-    """Runs one spoken session on an accepted WebSocket until it ends or the browser leaves."""
+async def save_recording(recorder: Recorder | None) -> None:
+    if recorder is not None:
+        try:
+            await asyncio.to_thread(recorder.save)
+        except Exception as e:
+            logger.exception(f"Could not save the replay: {e.__class__.__name__}")
+
+
+async def run_browser_session(websocket: WebSocket, lang: str, api_key: str, record: bool = False) -> None:
+    """Runs one spoken session on an accepted WebSocket until it ends or the browser leaves.
+
+    record=True only when the person speaking ticked the consent box to be saved as a demo replay.
+    """
     global _active
     if _active >= MAX_SESSIONS:
         await websocket.send_json({"type": "case", "case": "BUSY", "detail": "Too many live sessions, try again"})
@@ -355,9 +389,13 @@ async def run_browser_session(websocket: WebSocket, lang: str, api_key: str) -> 
         return
     _active += 1
     try:
-        session = Session(lang=lang if lang in VOICES else "hi")
-        worker, _ = build_worker(websocket, session, BROWSER, BrowserSerializer(), api_key)
-        await run_worker(worker)
+        session = Session(lang=lang if lang in VOICES else "hi", recording=bool(record))
+        recorder = Recorder(session, "browser") if record else None
+        worker, _ = build_worker(websocket, session, BROWSER, BrowserSerializer(), api_key, recorder=recorder)
+        try:
+            await run_worker(worker)
+        finally:
+            await save_recording(recorder)
     finally:
         _active -= 1
 
@@ -373,6 +411,7 @@ async def run_phone_session(
     auth_token: str,
     publish: Publish,
     time_limit: int,
+    record: bool = False,
 ) -> Session:
     """Runs one spoken session on a Twilio Media Stream; hangs up when the session ends."""
     from pipecat.serializers.twilio import TwilioFrameSerializer
@@ -386,9 +425,20 @@ async def run_phone_session(
             audio_in_sample_rate=PHONE.sample_rate, audio_out_sample_rate=PHONE.sample_rate, auto_hang_up=True
         ),
     )
-    session = Session(lang=lang if lang in VOICES else "hi")
+    session = Session(lang=lang if lang in VOICES else "hi", recording=bool(record))
+    recorder = Recorder(session, "phone") if record else None
     worker, _ = build_worker(
-        websocket, session, PHONE, serializer, sarvam_key, publish=publish, session_timeout=time_limit + 30
+        websocket,
+        session,
+        PHONE,
+        serializer,
+        sarvam_key,
+        publish=publish,
+        session_timeout=time_limit + 30,
+        recorder=recorder,
     )
-    await run_worker(worker)
+    try:
+        await run_worker(worker)
+    finally:
+        await save_recording(recorder)
     return session

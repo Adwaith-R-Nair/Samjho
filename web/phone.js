@@ -10,6 +10,7 @@
 
   let box = null;
   let watch = null;
+  let recordNote = "";
 
   // The access code arrives once in the shared link (?k=...) and is kept for this tab.
   const params = new URLSearchParams(location.search);
@@ -62,6 +63,8 @@
     const phone = f.phone.value.replace(/[\s-]/g, "");
     if (!/^\+91[6-9]\d{9}$/.test(phone)) throw new Error("Enter an Indian mobile number as +91 followed by 10 digits.");
     if (!f.consent.checked) throw new Error("Please tick the box to agree to receive the demo call.");
+    // Only with the consent box ticked: the person answering agrees to be recorded and shown as a demo replay.
+    const record = Boolean(document.getElementById("recordConsent")?.checked);
     const button = f.querySelector("button");
     button.disabled = true;
     status("Placing the call...");
@@ -69,11 +72,12 @@
       const res = await fetch("/api/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, consent: true, lang: window.samjhoLang(), k: accessCode() }),
+        body: JSON.stringify({ phone, consent: true, lang: window.samjhoLang(), k: accessCode(), record }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || res.statusText);
       window.samjhoReset();
+      recordNote = record ? "Recording for a demo replay. " : "";
       follow(data.watch_id);
     } finally {
       button.disabled = false;
@@ -88,7 +92,8 @@
     ws.onmessage = (msg) => {
       const ev = JSON.parse(msg.data);
       if (ev.type === "call") {
-        status((STATUS[ev.status] || (() => ev.status))(ev));
+        const live = ev.status === "ringing" || ev.status === "connected";
+        status((live ? recordNote : "") + (STATUS[ev.status] || (() => ev.status))(ev));
         return;
       }
       window.samjhoHandleEvent(ev);

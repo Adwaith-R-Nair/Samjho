@@ -183,6 +183,11 @@ window.samjhoReset = () => {
 };
 document.querySelector('.tile[data-mode="phone"]').addEventListener("click", () => window.samjhoPhone.open());
 
+// Replay of a recorded consented session (web/replay.js): its events go through handleEvent in time with its audio.
+document.querySelector('.tile[data-mode="replay"]').addEventListener("click", () =>
+  window.samjhoReplay.open().catch((e) => note(e.message, "case")),
+);
+
 loadStatus().catch(() => {
   $("keys").textContent = "Could not reach the server.";
 });

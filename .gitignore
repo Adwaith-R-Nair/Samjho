@@ -19,3 +19,6 @@ node_modules/
 *.mp3
 recordings/
 scratch/
+
+# Consented demo replays are published on purpose (see replays/README.md)
+!replays/**/*.wav

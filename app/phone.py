@@ -24,6 +24,7 @@ from loguru import logger
 
 from app.config import load_settings
 from app.limits import CallLimiter
+from app.recording import has_replays
 
 PHONE_RE = re.compile(r"^\+91[6-9]\d{9}$")
 CALL_TIME_LIMIT = 300  # seconds, Twilio hangs up after this; a full session with repairs can pass 4 minutes
@@ -37,6 +38,11 @@ class CallRefused(Exception):
         super().__init__(message)
         self.status = status
         self.message = message
+
+
+def still_works() -> str:
+    """What a refused caller can still do: replay only once a consented session has been saved."""
+    return "Typing and replay still work." if has_replays() else "Typing still works."
 
 
 def valid_number(number: str) -> bool:
@@ -157,6 +163,7 @@ class Pending:
     masked: str
     created: float
     call_sid: str = ""
+    record: bool = False  # the person answering agreed to be saved as a demo replay
 
 
 class CallDesk:
@@ -173,10 +180,12 @@ class CallDesk:
         self._clock = clock
         self._pending: dict[str, Pending] = {}
 
-    async def place(self, number: str, consent: bool, lang: str, k: str, ip: str) -> dict:
+    async def place(
+        self, number: str, consent: bool, lang: str, k: str, ip: str, record: bool = False
+    ) -> dict:
         s = load_settings()
         if not s.calls_enabled:
-            raise CallRefused(403, "Phone calls are paused by the owner. Typing and replay still work.")
+            raise CallRefused(403, "Phone calls are paused by the owner. " + still_works())
         missing = [
             name
             for name, value in [
@@ -191,7 +200,7 @@ class CallDesk:
         if missing:
             raise CallRefused(503, "Phone calls are not set up: " + ", ".join(missing) + " not set.")
         if s.judge_token and not hmac.compare_digest((k or "").encode(), s.judge_token.encode()):
-            raise CallRefused(403, "This link needs its access code to place calls. Typing and replay still work.")
+            raise CallRefused(403, "This link needs its access code to place calls. " + still_works())
         if consent is not True:
             raise CallRefused(400, "Please tick the box to agree to receive the demo call.")
         if not valid_number(number):
@@ -204,7 +213,7 @@ class CallDesk:
         token = secrets.token_urlsafe(24)
         wid = secrets.token_urlsafe(12)
         lang = lang if lang in ("hi", "en") else "hi"
-        pending = Pending(wid, lang, rid, mask(number), self._clock())
+        pending = Pending(wid, lang, rid, mask(number), self._clock(), record=bool(record))
         self._pending[token] = pending
         self.hub.open(wid)
         twiml = build_twiml(stream_url(s.public_base_url), token)
@@ -291,6 +300,7 @@ class CallDesk:
                 auth_token=s.twilio_auth_token,
                 publish=lambda ev: self.hub.publish(wid, ev),
                 time_limit=CALL_TIME_LIMIT,
+                record=pending.record,
             )
         except Exception as e:
             logger.exception(f"Phone session {mask_sid(call_sid)} failed: {e.__class__.__name__}")

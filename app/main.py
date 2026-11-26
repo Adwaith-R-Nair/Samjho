@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import phone
+from app import phone, recording
 from app.config import load_settings
 from app.flow import Session
 
@@ -47,7 +47,7 @@ def healthz() -> dict:
 @app.get("/api/status")
 def status() -> dict:
     result = load_settings().status()
-    has_replay = REPLAY_DIR.is_dir() and any(REPLAY_DIR.glob("*.json"))
+    has_replay = recording.has_replays()  # replays/*/manifest.json (SAMJHO_REPLAY_DIR overrides the folder)
     result["replay"] = {"ready": has_replay, "reason": "" if has_replay else "No recorded test session added yet"}
     return result
 
@@ -71,7 +71,7 @@ def text_say(body: SayIn) -> dict:
 
 
 @app.websocket("/ws/browser")
-async def ws_browser(websocket: WebSocket, lang: str = "hi") -> None:
+async def ws_browser(websocket: WebSocket, lang: str = "hi", record: int = 0) -> None:
     """Browser voice: PCM16 16 kHz audio both ways, UI events as JSON. See app/voice.py."""
     await websocket.accept()
     key = load_settings().sarvam_api_key
@@ -81,7 +81,7 @@ async def ws_browser(websocket: WebSocket, lang: str = "hi") -> None:
         return
     from app.voice import run_browser_session  # imported here so text mode starts without loading Pipecat
 
-    await run_browser_session(websocket, lang, key)
+    await run_browser_session(websocket, lang, key, record=record == 1)
 
 
 class CallIn(BaseModel):
@@ -89,6 +89,7 @@ class CallIn(BaseModel):
     consent: bool = False
     lang: str = "hi"
     k: str = ""
+    record: bool = False
 
 
 @app.post("/api/call")
@@ -96,7 +97,12 @@ async def api_call(body: CallIn, request: Request) -> dict:
     """Places one demo call (see app/phone.py for the checks). Returns a watch id for /ws/watch."""
     try:
         return await phone.desk().place(
-            body.phone.strip().replace(" ", ""), body.consent, body.lang, body.k, phone.client_ip(request)
+            body.phone.strip().replace(" ", ""),
+            body.consent,
+            body.lang,
+            body.k,
+            phone.client_ip(request),
+            body.record,
         )
     except phone.CallRefused as e:
         raise HTTPException(e.status, e.message) from None
@@ -125,6 +131,28 @@ async def ws_watch(websocket: WebSocket, id: str = "") -> None:
         await websocket.close()
     except Exception:  # the watcher left; the call goes on
         pass
+
+
+@app.get("/api/replays")
+def replays() -> list[dict]:
+    """Recorded consented sessions, newest first (their manifests)."""
+    return recording.list_replays()
+
+
+@app.get("/api/replays/{rid}/events")
+def replay_events(rid: str) -> list[dict]:
+    events = recording.read_events(rid)
+    if events is None:
+        raise HTTPException(404, "no such replay")
+    return events
+
+
+@app.get("/api/replays/{rid}/audio")
+def replay_audio(rid: str) -> FileResponse:
+    path = recording.replay_file(rid, "audio.wav")
+    if path is None:
+        raise HTTPException(404, "no audio for this replay")
+    return FileResponse(path, media_type="audio/wav")
 
 
 @app.get("/")

@@ -83,7 +83,7 @@ class CallLimiter:
             if self._active_count(now) >= self.max_concurrent:
                 return None, "Two demo calls are already running. Try again in a few minutes."
             if self._recent(self._calls, now, DAY) >= self.global_per_day:
-                return None, "The demo has used its calls for today. Typing and replay still work."
+                return None, "The demo has used its calls for today. Typing still works."
             num.append(now)
             ip_times.append(now)
             self._calls.append(now)

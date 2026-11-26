@@ -48,10 +48,11 @@ def yes_no(text: str) -> bool | None:
 
 
 class Session:
-    def __init__(self, loan: Loan = SAMPLE_LOAN, lang: str = "hi") -> None:
+    def __init__(self, loan: Loan = SAMPLE_LOAN, lang: str = "hi", recording: bool = False) -> None:
         self.id = uuid.uuid4().hex[:12]
         self.loan = loan
         self.lang = lang if lang in ("hi", "en") else "hi"
+        self.recording = recording  # said aloud in the intro, and logged
         self.state = "consent"
         self.verdicts: dict[str, Verdict] = {f: Verdict(f, "grey") for f in FACTS}
         self.rounds = {f: 0 for f in FACTS}
@@ -109,10 +110,10 @@ class Session:
         return self.state == "done"
 
     def start(self) -> list[dict]:
-        self.ledger.append("session_start", loan_id=self.loan.loan_id, lang=self.lang)
+        self.ledger.append("session_start", loan_id=self.loan.loan_id, lang=self.lang, recording=self.recording)
         warm()
         self._state("consent")
-        self._say(lines.intro())
+        self._say(lines.intro(self.recording))
         return self._flush()
 
     def hear(self, text: str) -> list[dict]:

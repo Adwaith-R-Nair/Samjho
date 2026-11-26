@@ -401,3 +401,14 @@ def test_phone_pipeline_builds_offline_at_8k():
     assert brain.session.state == "consent" and worker is not None
     with pytest.raises(ValueError):  # auto hang-up needs Twilio credentials: built only inside the call
         TwilioFrameSerializer("MZ1")
+
+
+def test_refusals_offer_replay_only_when_one_exists(env, fake, tmp_path):
+    env.setenv("SAMJHO_REPLAY_DIR", str(tmp_path))
+    env.setenv("CALLS_ENABLED", "false")
+    client = TestClient(app)
+    detail = call(client).json()["detail"]
+    assert detail.endswith("Typing still works.") and "replay" not in detail
+    (tmp_path / "2026-11-28_abc").mkdir()
+    (tmp_path / "2026-11-28_abc" / "manifest.json").write_text("{}")
+    assert call(client).json()["detail"].endswith("Typing and replay still work.")

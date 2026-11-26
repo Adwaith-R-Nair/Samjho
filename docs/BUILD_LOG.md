@@ -206,7 +206,26 @@ Problems met:
 Not yet proven, and planned for the first real call: hang-up via Twilio's API, real network audio, the
 "International Call" label, and how fast barge-in feels on a real line (about 1 s in the simulation).
 
+### Commit 12: consented recordings that judges can replay
+A tester can tick "Save this session as a demo replay. The person speaking agrees to be recorded and shown." (off by
+default). The session is then saved under `replays/<date>_<id>/`: every UI event with its time, one mixed WAV of
+both voices (Pipecat's AudioBufferProcessor placed after the output so it hears both), and a manifest with the
+before/after score and the seal. "Replay a real test session" plays the audio and fires the events at their
+recorded times, so the transcript, fact chips and record appear in sync, under a "REPLAY of a real consented
+session, not live" badge. Phone numbers are masked in saved events; ids and paths are checked so nothing outside
+`replays/` can be served. The tile stays off until a real replay exists; synthetic test replays go to `scratch/`.
+
+Added after review: Samjho now says aloud at the start of a recorded session that it is being recorded, with her
+permission, and that she can stop it (`lines.intro(recording=True)`), and the session log notes it.
+
+Observed in the live test run: one turn took 4.9 s instead of about 1.3 s; the server log showed Sarvam
+speech-to-text returning the transcript about 4.5 s after she stopped. Not our code, not Gemini. It will show in the
+latency strip if it happens; to watch in real sessions.
+
+Known limits: a 5-minute session is about 10 MB of WAV in git; the audio runs on for a few seconds after the last
+event, until the socket closes.
+
 ### In progress
 - First real phone call, once the Twilio account is paid.
 - Hosted live link on Railway.
-- Consented real test sessions and replays.
+- Consented real test sessions (the replay feature is ready for them).

@@ -24,7 +24,9 @@
     statusEl.className = "voice-status";
     statusEl.style.margin = "10px 0 0";
     statusEl.hidden = true;
-    statusEl.innerHTML = '<span class="voice-text muted"></span> <button type="button" class="voice-end">End</button>';
+    statusEl.innerHTML =
+      '<strong class="voice-rec" hidden style="color: var(--red)">Recording for a demo replay. </strong>' +
+      '<span class="voice-text muted"></span> <button type="button" class="voice-end">End</button>';
     statusEl.querySelector(".voice-end").onclick = () => stop("Session ended.");
     const tiles = document.getElementById("tiles");
     tiles.parentNode.insertBefore(statusEl, tiles.nextSibling);
@@ -102,8 +104,14 @@
     if (!finished) status(speaking ? "Samjho is speaking. Your mic is paused." : "Listening. Speak now.");
   }
 
+  function recording(on) {
+    ui().querySelector(".voice-rec").hidden = !on;
+  }
+
   async function start(lang) {
     if (ws) stop();
+    // Only with the consent box ticked: the person speaking agrees to be recorded and shown as a demo replay.
+    const record = Boolean(document.getElementById("recordConsent")?.checked);
     finished = false;
     refused = false;
     lastStatus = "";
@@ -124,7 +132,8 @@
     micNode.connect(mute).connect(ctx.destination);
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}/ws/browser?lang=${encodeURIComponent(lang)}`);
+    ws = new WebSocket(`${proto}://${location.host}/ws/browser?lang=${encodeURIComponent(lang)}&record=${record ? 1 : 0}`);
+    recording(record);
     ws.binaryType = "arraybuffer";
     status("Connecting...");
     ws.onmessage = onMessage;
@@ -141,6 +150,7 @@
   }
 
   function release() {
+    recording(false);
     if (stream) stream.getTracks().forEach((t) => t.stop());
     if (micNode) micNode.port.onmessage = null;
     // Let queued audio (the goodbye) finish before closing the audio context.

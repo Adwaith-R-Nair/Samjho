@@ -265,3 +265,9 @@ def test_generated_answers_may_only_use_the_loans_own_numbers():
     assert numbers_are_from_the_loan("हर हफ्ते 1095 रुपये, 52 हफ्ते तक", SAMPLE_LOAN)
     assert not numbers_are_from_the_loan("हर महीने 4,500 रुपये", SAMPLE_LOAN)
     assert not numbers_are_from_the_loan("The penalty is Rs 200", SAMPLE_LOAN)
+
+
+def test_a_recorded_session_says_so_aloud_before_anything_else():
+    first = says(Session(recording=True).start())[0]
+    assert "recorded for a demo" in first["en"] and "रिकॉर्ड" in first["hi"]
+    assert "recorded" not in says(Session().start())[0]["en"]

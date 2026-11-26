@@ -46,6 +46,10 @@
         <label><input type="radio" name="lang" value="hi" checked> हिंदी</label>
         <label><input type="radio" name="lang" value="en"> English</label>
       </div>
+      <label class="langs record-consent">
+        <input type="checkbox" id="recordConsent">
+        <span>Save this session as a demo replay. The person speaking agrees to be recorded and shown.</span>
+      </label>
       <p class="hint muted" id="hint" hidden>Tip: when asked to explain the loan back, try saying the wrong amount, like "pachaas hazaar haath mein aayenge", and watch Samjho catch it.</p>
       <div class="transcript" id="transcript" aria-live="polite"></div>
       <form class="say" id="say" hidden>
@@ -74,6 +78,7 @@
   </footer>
   <script src="/static/voice.js"></script>
   <script src="/static/phone.js"></script>
+  <script src="/static/replay.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -31,6 +31,7 @@ import websockets
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
+SCRATCH_REPLAYS = ROOT / "scratch" / "replays"
 RATE = 16000
 CHUNK = 640  # 20 ms of PCM16 mono at 16 kHz
 USER_VOICE = "rahul_hi_conversational"
@@ -73,13 +74,14 @@ async def wait_for_server(port: int, proc: subprocess.Popen) -> None:
     raise SystemExit("server did not start")
 
 
-async def converse(port: int, texts: list[str], utterances: list[bytes]) -> dict:
+async def converse(port: int, texts: list[str], utterances: list[bytes], record: bool = False) -> dict:
     events: list[dict] = []
     bot_audio = bytearray()
     st = {"last_audio": 0.0, "speech_end": None, "client_latency": [], "audio_after_record": 0, "closed": None}
     outbox: asyncio.Queue[bytes] = asyncio.Queue()
 
-    async with websockets.connect(f"ws://127.0.0.1:{port}/ws/browser?lang=hi", max_size=None) as ws:
+    url = f"ws://127.0.0.1:{port}/ws/browser?lang=hi&record={1 if record else 0}"
+    async with websockets.connect(url, max_size=None) as ws:
 
         async def mic() -> None:
             # A live mic never stops: real-time 20 ms frames, speech when queued, silence otherwise.
@@ -154,10 +156,43 @@ async def converse(port: int, texts: list[str], utterances: list[bytes]) -> dict
     }
 
 
+def check_replay(before: set) -> list[str]:
+    """Checks the replay that session 1 left under scratch/replays."""
+    new = sorted(set(SCRATCH_REPLAYS.glob("*/manifest.json")) - before)
+    if not new:
+        return ["--record: no replay was saved"]
+    folder = new[-1].parent
+    manifest = json.loads(new[-1].read_text(encoding="utf-8"))
+    events = [json.loads(x) for x in (folder / "events.jsonl").read_text(encoding="utf-8").splitlines() if x]
+    times = [e["t"] for e in events]
+    with wave.open(str(folder / "audio.wav")) as w:
+        audio_secs = w.getnframes() / w.getframerate()
+        rate = w.getframerate()
+    print(f"\nReplay saved: {folder}")
+    print(f"  manifest: {json.dumps(manifest, ensure_ascii=False)}")
+    print(f"  events: {len(events)}, last at {times[-1]:.1f} s; audio: {audio_secs:.1f} s at {rate} Hz")
+    problems = []
+    if times != sorted(times):
+        problems.append("replay event times are not in order")
+    if [e["type"] for e in events].count("heard") < len(TURNS):
+        problems.append("replay is missing heard events")
+    if abs(audio_secs - manifest["duration_s"]) > 2 or audio_secs < times[-1] - 2:
+        problems.append("replay audio length does not match its events")
+    for key in ("session_id", "lang", "channel", "started_at", "duration_s", "consent_text", "seal_sha256"):
+        if key not in manifest:
+            problems.append(f"manifest lacks {key}")
+    return problems
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=7861)
     ap.add_argument("--save", help="write the bot audio of session 1 to this WAV file")
+    ap.add_argument(
+        "--record",
+        action="store_true",
+        help="record session 1 as a replay under scratch/replays (synthetic voices never go in replays/)",
+    )
     ap.add_argument("--server-log", default=str(Path(tempfile.gettempdir()) / "samjho_voice_smoke_server.log"))
     args = ap.parse_args()
 
@@ -177,13 +212,14 @@ async def main() -> int:
         cwd=ROOT,
         stdout=log,
         stderr=subprocess.STDOUT,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "SAMJHO_REPLAY_DIR": str(SCRATCH_REPLAYS)},
     )
     try:
         await wait_for_server(args.port, proc)
         print(f"Server up on :{args.port} (log: {args.server_log})")
         print("\nSession 1: agree, move on, wrong teach-back")
-        one = await converse(args.port, TURNS, answers)
+        before = set(SCRATCH_REPLAYS.glob("*/manifest.json")) if args.record else set()
+        one = await converse(args.port, TURNS, answers, record=args.record)
         print("\nSession 2: decline at the start")
         two = await converse(args.port, DECLINE, decline)
     finally:
@@ -215,7 +251,7 @@ async def main() -> int:
             w.setframerate(RATE)
             w.writeframes(one["bot_audio"])
 
-    problems = []
+    problems = check_replay(before) if args.record else []
     if kinds.count("say") < 3:
         problems.append("expected say events")
     if len(heard) < len(TURNS):

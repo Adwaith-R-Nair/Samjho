@@ -12,12 +12,18 @@ def L(hi: str, en: str) -> dict:
     return {"hi": hi, "en": en}
 
 
-def intro() -> dict:
+def intro(recording: bool = False) -> dict:
+    if recording:
+        privacy_hi = "यह बातचीत आपकी इजाज़त से डेमो के लिए रिकॉर्ड हो रही है; आप कभी भी रुकवा सकती हैं।"
+        privacy_en = "With your permission, this conversation is being recorded for a demo; you can stop it at any time."
+    else:
+        privacy_hi = "यह बातचीत निजी है।"
+        privacy_en = "This conversation is private."
     return L(
         "नमस्ते, मैं समझो हूँ। मैं आपके लोन की बातें आसान भाषा में समझाऊँगी, फिर आपसे आपके शब्दों में सुनूँगी कि आपने क्या समझा। "
-        "यह बातचीत निजी है। क्या शुरू करें? हाँ या ना बोलिए।",
+        f"{privacy_hi} क्या शुरू करें? हाँ या ना बोलिए।",
         "Hello, I am Samjho. I will explain your loan simply, then hear in your own words what you understood. "
-        "This conversation is private. Shall we start? Say yes or no.",
+        f"{privacy_en} Shall we start? Say yes or no.",
     )
 
 
