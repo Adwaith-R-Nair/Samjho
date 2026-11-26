@@ -144,3 +144,9 @@ Problems met and how they were handled:
 
 ### In progress
 - Real phone call channel (Twilio), once the paid account is set up.
+
+### Commit 8: a README that only claims what runs, and a record checker
+The README was rewritten for judges: what works today with the file that does it, what is planned, the numbers
+we measured (0 false passes on 53 synthetic answers; about 1.05 s and 1.3 s reply times in the browser), how to
+run it, and honest limits. `scripts/verify_record.py` checks a downloaded record against its seal; tried on a
+real record (VALID) and on the same record with one timestamp changed by one second (TAMPERED).
