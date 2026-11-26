@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 :root {
   --bg: #f6f3ee;
   --card: #ffffff;
@@ -95,3 +96,4 @@ h2 { margin: 0 0 8px; font-size: 18px; }
 .record li.red, .record li.unclear { color: var(--red); }
 .record li.amber { color: var(--amber); }
 .seal code { word-break: break-all; font-size: 12px; }
+.score { font-size: 15px; }

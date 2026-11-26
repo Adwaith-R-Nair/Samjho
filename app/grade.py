@@ -31,6 +31,12 @@ _WINDOW = 32  # characters either side of a number in which a cue word counts
 # Clause breaks: a cue word only counts for numbers in the same clause, so in
 # "har hafte 1095 dena hai, kul 56,940" the "kul" belongs to 56,940 and not to 1095.
 _CLAUSE = re.compile(r"[,;:.!?।]|\b(?:aur|and|phir|then|fir)\b|और|फिर", re.IGNORECASE)
+# Her own words for the schedule, quoted back to her ("aapne kaha 'har mahine'"), not our label "monthly".
+_FREQ_WORDS = re.compile(
+    r"(?:har|agle|ek|do|pandrah|15)\s+(?:hafte|hafta|mahine|mahina|din|week|month)\w*|weekly|monthly|"
+    r"हर\s+(?:हफ्ते|हफ़्ते|महीने|दिन)|अगले\s+(?:हफ्ते|हफ़्ते|महीने)|हफ्ते|महीने|\bhafte\b|\bmahine\b|\bweek\b|\bmonth\b",
+    re.IGNORECASE,
+)
 _MAX_DEDUCTION_SHARE = 0.2  # a "deduction" bigger than this share of the loan is not a deduction
 
 
@@ -52,6 +58,15 @@ class Verdict:
     said: object = None
     quote: str = ""
     reason: str = ""
+
+
+def _freq_quote(text: str, freq: str) -> str:
+    """The words she used for the schedule the parser settled on ("mahine nahi, har hafte" quotes "har hafte")."""
+    marks = {"weekly": ("haft", "week", "हफ"), "monthly": ("mahin", "month", "महीन")}.get(freq, ())
+    for m in _FREQ_WORDS.finditer(text):
+        if any(k in m.group(0).lower() for k in marks):
+            return m.group(0)
+    return freq
 
 
 def _clause_bounds(text: str, n: ParsedNumber) -> tuple[int, int]:
@@ -123,7 +138,7 @@ def assign(text: str, loan: Loan, target: str | None = None) -> dict[str, Eviden
 
     freq = parse_frequency(text)
     if freq:
-        found["frequency"] = Evidence("frequency", freq, freq)
+        found["frequency"] = Evidence("frequency", freq, _freq_quote(text, freq))
     return found
 
 

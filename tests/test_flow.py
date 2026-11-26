@@ -200,3 +200,24 @@ def test_record_amounts_are_integers_so_a_browser_copy_still_verifies():
     # A browser re-serialises the JSON; simulate the round trip and check the seal still holds.
     entries = json.loads(json.dumps(rec["entries"]))
     assert verify(entries, rec["seal_sha256"])
+
+
+def test_record_counts_first_answers_and_the_result_after_repair():
+    s = Session()
+    to_teachback(s)
+    s.hear("pachaas hazaar haath mein aayenge, har mahine hazaar")  # cash red, freq red, instalment amber
+    s.hear("adtaalis hazaar chaar sau das")  # cash repaired
+    s.hear("pandrah sau nabbe")  # deductions, first answer, right
+    s.hear("ek hazaar pachaanve")  # instalment repaired
+    s.hear("agle hafte")  # frequency repaired
+    s.hear("chhappan hazaar nau sau chaalis")  # total, first answer, right
+    s.hear("nahi")
+    rec = s.hear("haan")[-1]["record"]
+    assert rec["right_first_answer"] == 2
+    assert rec["right_after_samjho"] == 5
+    assert rec["first_answer"]["cash_in_hand"] == "red"
+
+
+def test_schedule_is_quoted_in_her_words_not_our_label():
+    assert grade("har mahine hazaar", SAMPLE_LOAN)["frequency"].quote == "har mahine"
+    assert grade("mahine nahi, har hafte", SAMPLE_LOAN)["frequency"].quote == "har hafte"

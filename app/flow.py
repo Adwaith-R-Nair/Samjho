@@ -53,6 +53,7 @@ class Session:
         self.state = "consent"
         self.verdicts: dict[str, Verdict] = {f: Verdict(f, "grey") for f in FACTS}
         self.rounds = {f: 0 for f in FACTS}
+        self.first_answer: dict[str, str] = {}  # status of her first answer about each fact, before any repair
         self.asked: set[str] = set()
         self.target: str | None = None
         self.questions: list[str] = []
@@ -76,6 +77,8 @@ class Session:
         if isinstance(v.said, float) and v.said.is_integer():
             v = Verdict(v.fact, v.status, int(v.said), v.quote, v.reason)
         self.verdicts[v.fact] = v
+        if v.status in ("green", "amber", "red", "grey") and v.fact not in self.first_answer:
+            self.first_answer[v.fact] = v.status
         self.ledger.append("verdict", fact=v.fact, status=v.status, said=v.said, quote=v.quote, reason=v.reason)
         self._out.append(
             {
@@ -232,6 +235,10 @@ class Session:
                 for f, v in self.verdicts.items()
             },
             "understood_all": all(v.status == "green" for v in self.verdicts.values()),
+            # The measurable result of one session: what she got right on her own first answer, and at the end.
+            "right_first_answer": sum(1 for f in FACTS if self.first_answer.get(f) == "green"),
+            "right_after_samjho": sum(1 for v in self.verdicts.values() if v.status == "green"),
+            "first_answer": {f: self.first_answer.get(f, "not asked") for f in FACTS},
             "extra_money_reported": self.extra_money_reported,
             "questions_for_lender": self.questions,
             "consent": self.consent,

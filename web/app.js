@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = {
   green: "Understood",
-  amber: "Close, explained again",
+  amber: "Close, not exact",
   red: "Not what the loan says",
   grey: "Not said yet",
   unclear: "Lender will call to explain",
@@ -67,6 +67,7 @@ function renderRecord(record) {
     <h3>Acknowledgement record</h3>
     <p>Consent: <b>${record.consent ?? "none"}</b>. Understood all five: <b>${record.understood_all ? "yes" : "no"}</b>.
        Extra money reported: <b>${record.extra_money_reported === null ? "not asked" : record.extra_money_reported ? "yes, held for review" : "no"}</b>.</p>
+    <p class="score">Right on her first answer: <b>${record.right_first_answer} of 5</b>. Right after Samjho: <b>${record.right_after_samjho} of 5</b>.</p>
     <ul>${facts}</ul>
     <p class="seal">Seal (SHA-256 of the whole session log): <code>${record.seal_sha256}</code></p>
     <button type="button" id="download">Download record (JSON)</button>`;
@@ -154,7 +155,7 @@ async function loadStatus() {
   });
   const missing = Object.values(status).filter((s) => !s.ready).length;
   $("keys").textContent = missing
-    ? "Some features are off because their keys are not set. Typing and replay always work."
+    ? "Some features are off because their keys are not set. Typing always works."
     : "All features available.";
 }
 

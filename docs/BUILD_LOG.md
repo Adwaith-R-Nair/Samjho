@@ -93,5 +93,18 @@ Bugs found and fixed before this commit (all now covered by tests):
 6. **The replay tile was clickable with nothing behind it.** Replay now reports "not ready" until a consented
    real session is added under `replays/`.
 
+### Commit 5: design docs, a browser run-through, and a before/after score
+PRD, roadmap, high-level and low-level design written by a docs agent from the code, every claim checked against
+it; anything not built is marked Planned. The agent also found bugs 5 and 6 above.
+
+A full typed session in Chrome (Hindi mode) went: classic miss caught red, re-explained with her words, four
+facts repaired, extra-money report held for the grievance officer, consent sealed. It surfaced three UI bugs, all
+fixed here: the answer box showed before a session started (a CSS `display` rule overrode `hidden`); the amber
+label said "explained again" before anything was explained; and a repair quoted our label "monthly" instead of
+her words "har mahine". The schedule is now quoted in her words (`_freq_quote`, tested on "mahine nahi, har hafte").
+
+New: each record counts what she got right on her first answer and what she got right after Samjho (in that run:
+2 of 5, then 5 of 5). This is the per-session result the video and deck will report from real test sessions.
+
 ### In progress
 - Browser voice channel on Pipecat with Sarvam speech-to-text and text-to-speech, built in parallel by a subagent.
