@@ -18,6 +18,8 @@ Wispr Flow. Theme: Livelihoods and small business. The loan and the people are s
 |---|---|---|
 | Talk in the browser | Speak Hindi, Hinglish or English; Samjho answers in a Hindi or English (India) voice. Sarvam speech-to-text and text-to-speech on Pipecat | `app/voice.py`, `app/browser_serializer.py`, `web/voice.js` |
 | Type instead | The same conversation and the same checks, no microphone, no keys | `POST /api/text/*` in `app/main.py` |
+| Real phone call | Twilio calls any Indian mobile and the same conversation runs at 8 kHz; she can interrupt, is muted only while amounts are read; the requesting browser follows the call live. Rate limits, consent and a kill switch protect a public link. Proven in a full simulated call with live Sarvam; first real call pending the Twilio account | `app/phone.py`, `app/limits.py`, `web/phone.js` |
+| Her questions | Asked during the explanation: fixed answers for what borrowers ask (again and slower, how long, cash in hand, total, what else); anything else goes to Gemini fenced to the loan's own facts and numbers, or is noted for the lender | `app/answer.py` |
 | The conversation | Consent, the loan in four short lines with questions allowed, "explain it to your daughter", then for each fact she missed: ask, re-explain with her own words and figures, re-check with a fresh question; two rounds, then a human callback (never a block) | `app/flow.py`, `app/lines.py` |
 | Checked in code | Five facts (cash in hand, deductions, instalment, how often, total) judged against the loan with fixed tolerances. A word phone audio often swaps ("pachaas" or "pachpan") triggers a re-ask only when the other reading would change the verdict | `app/grade.py`, `app/loan.py` |
 | Hindi numbers | "adtaalis hazaar chaar sau das", "पंद्रह सौ नब्बे", "dedh hazaar", "₹48,410", "forty eight thousand" | `app/hi_numbers.py` (544 tests) |
@@ -25,7 +27,7 @@ Wispr Flow. Theme: Livelihoods and small business. The loan and the people are s
 | Sealed record | Every turn is hash-chained with SHA-256; the record shows each fact, her words, how often it was re-explained, right on her first answer vs after Samjho, and her consent. Anyone can re-verify a downloaded record with `python scripts/verify_record.py file.json` | `app/record.py`, `Session.record()` |
 | Runs anywhere | `docker compose up` with no keys shows the main screen; features that need a key say which key is not set | `app/config.py`, CI job `fresh-clone-boot` |
 
-Planned during Round 2 and not yet in this README's "works" list: a real phone call to any Indian mobile (Twilio),
+Planned during Round 2 and not yet in this README's "works" list: the first real phone call on the network,
 replays of consented real test sessions, and the hosted live link. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Numbers we measured
@@ -36,7 +38,7 @@ replays of consented real test sessions, and the hosted live link. See [docs/ROA
 - **Reply time in the browser: about 1.05 s** after a yes or no and **about 1.3 s** after a number answer, from the
   end of her speech to the first reply audio, measured with live Sarvam by `scripts/voice_smoke.py`. Of that, 0.6 s
   or 0.9 s is a deliberate wait so she can finish ("pachaas ... hazaar").
-- **586 automated tests**, run on every push with a fresh-clone docker boot.
+- **630 automated tests**, run on every push with a fresh-clone docker boot.
 
 ## Run it
 
@@ -57,6 +59,12 @@ python -m venv .venv
 .venv/Scripts/python -m pytest -q
 .venv/Scripts/python -m eval.run_eval
 ```
+
+Real phone calls (optional, needs a paid Twilio account with a US number and India enabled in Voice Geo
+Permissions): set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `MY_PHONE_NUMBER` and
+`CALLS_ENABLED=true` in `.env`; give Twilio a public address with `cloudflared tunnel --url http://localhost:7860`
+and put the printed https URL in `PUBLIC_BASE_URL`; restart. Without an account,
+`python scripts/call_smoke.py --simulate` runs a whole call locally with live Sarvam, faking only the dialler.
 
 Try this in "Type instead" (Hindi): say `haan`, then `aage`, then the classic miss
 `pachaas hazaar haath mein aayenge aur har mahine hazaar rupaye bharne hain`. Cash in hand and how often turn red,
