@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  fresh-clone-boot:
+    # What a judge does: clone, docker compose up with no keys, open the main screen.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build -d
+      - name: wait for the app
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:7860/healthz && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: main screen and key status without keys
+        run: |
+          curl -fsS http://localhost:7860/ | grep -q "Samjho"
+          curl -fsS http://localhost:7860/api/status | grep -q "SARVAM_API_KEY not set"
+      - if: always()
+        run: docker compose down

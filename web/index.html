@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Samjho: her voice, not her thumb</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">समझो</span>
+      <span class="name">Samjho</span>
+    </div>
+    <p class="tag">Her voice, not her thumb. Before a borrower acknowledges her loan, she says it back in her own words and every number is checked in code.</p>
+  </header>
+
+  <main class="grid">
+    <section class="card call" aria-label="Conversation">
+      <h2>Start a session</h2>
+      <p class="muted">Sample loan (synthetic): Rs 50,000 sanctioned, Rs 1,590 deducted, Rs 48,410 in hand, Rs 1,095 every week for 52 weeks, Rs 56,940 in total.</p>
+      <div class="tiles" id="tiles">
+        <button class="tile" data-mode="browser" disabled>
+          <strong>Talk in the browser</strong>
+          <span>Hindi or English, with your microphone</span>
+          <em class="state" data-for="voice"></em>
+        </button>
+        <button class="tile" data-mode="phone" disabled>
+          <strong>Get a real phone call</strong>
+          <span>Indian mobile numbers only</span>
+          <em class="state" data-for="phone"></em>
+        </button>
+        <button class="tile" data-mode="text" disabled>
+          <strong>Type instead</strong>
+          <span>Same checks, no microphone</span>
+          <em class="state" data-for="text"></em>
+        </button>
+        <button class="tile" data-mode="replay" disabled>
+          <strong>Replay a real test session</strong>
+          <span>Recorded with the tester's consent</span>
+          <em class="state" data-for="replay"></em>
+        </button>
+      </div>
+      <div class="transcript" id="transcript" aria-live="polite"></div>
+    </section>
+
+    <section class="card panel" aria-label="What Samjho checked">
+      <h2>What she understood</h2>
+      <ul class="facts" id="facts">
+        <li class="fact" data-fact="cash_in_hand"><span class="label">Cash in hand</span><span class="truth">Rs 48,410</span><span class="said"></span></li>
+        <li class="fact" data-fact="deductions"><span class="label">Deductions</span><span class="truth">Rs 1,590</span><span class="said"></span></li>
+        <li class="fact" data-fact="instalment"><span class="label">Instalment</span><span class="truth">Rs 1,095</span><span class="said"></span></li>
+        <li class="fact" data-fact="frequency"><span class="label">How often</span><span class="truth">Every week, 52 weeks</span><span class="said"></span></li>
+        <li class="fact" data-fact="total"><span class="label">Total to repay</span><span class="truth">Rs 56,940</span><span class="said"></span></li>
+      </ul>
+      <div class="events" id="events"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span id="keys"></span>
+    <span>Synthetic loan and people only. Built by voice with Wispr Flow.</span>
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

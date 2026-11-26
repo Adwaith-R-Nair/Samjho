@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Private workspace: strategy, research, drafts, grading prompts. Never public.
+private/
+CLAUDE.md
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Audio and call recordings (may contain real voices)
+*.wav
+*.mp3
+recordings/
+scratch/

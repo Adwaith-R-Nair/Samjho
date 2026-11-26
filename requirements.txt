@@ -1,0 +1,6 @@
+pipecat-ai[sarvam,google,silero]==1.17.0
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+python-dotenv==1.2.4
+twilio==9.13.0
+httpx==0.29.0

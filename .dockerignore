@@ -1,0 +1,11 @@
+.env
+.venv
+.git
+private
+scratch
+recordings
+CLAUDE.md
+.claude
+__pycache__
+*.pyc
+tests

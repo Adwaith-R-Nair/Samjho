@@ -1,0 +1,18 @@
+# One command: docker compose up --build, then open http://localhost:7860
+# Every key is optional. Without keys the app still starts and shows its main screen;
+# features that need a key say "not set". Put keys in a .env file next to this one if you have them.
+services:
+  app:
+    build: .
+    ports:
+      - "7860:7860"
+    environment:
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      JUDGE_TOKEN: ${JUDGE_TOKEN:-}
+      CALLS_ENABLED: ${CALLS_ENABLED:-false}
+    restart: unless-stopped
