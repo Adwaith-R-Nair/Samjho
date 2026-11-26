@@ -142,11 +142,42 @@ Problems met and how they were handled:
 5. Notices such as "SARVAM_API_KEY not set" and "too many live sessions" showed only their code in the panel.
    Fixed to show the explanation.
 
-### In progress
-- Real phone call channel (Twilio), once the paid account is set up.
-
 ### Commit 8: a README that only claims what runs, and a record checker
 The README was rewritten for judges: what works today with the file that does it, what is planned, the numbers
 we measured (0 false passes on 53 synthetic answers; about 1.05 s and 1.3 s reply times in the browser), how to
 run it, and honest limits. `scripts/verify_record.py` checks a downloaded record against its seal; tried on a
 real record (VALID) and on the same record with one timestamp changed by one second (TAMPERED).
+
+### Commit 9: answering her real questions (from the first real-mic test)
+Adwaith tried "Talk in the browser" with his own voice. Speech recognition and the voice worked (reply times on
+screen: 1.07, 1.33, 1.58 and 1.34 s), but every question he asked got "the lender will answer this":
+"एक और बार ... थोड़े और आसान भाषा में?" (explain again, simpler), "ये मुझे कब तक चुकाना होगा?" (until when?) and
+"किस्त के अलावा ... कुछ कहोगी?" (what else besides the instalment?). Only four fixed questions existed (insurance,
+fee, interest, missed payment), so a real borrower would have been stonewalled.
+
+Fix, in `app/answer.py`, three layers:
+1. Fixed answers for what people actually ask: explain again slowly and simply, how long, cash in hand, total,
+   instalment, "what else" (three things to remember, including that nobody may ask her for extra money), plus the
+   original four. His three questions are now permanent tests.
+2. For anything else, Gemini, fenced: it sees only the loan's facts, and every number in its answer must be one of
+   the loan's own numbers, or the answer is thrown away (tested with "Rs 200 penalty" and "4,500 a month"). It
+   explains; it never judges her understanding. Questions the facts cannot answer (early repayment, first due date)
+   correctly fall through to "noted for the lender".
+3. After three questions Samjho says "good questions, let us move on" and goes to the teach-back, so a session
+   cannot stall.
+
+Problems met on the way:
+- `gemini-2.5-flash-lite` returned 404: retired for new accounts. Switched to `gemini-3.5-flash-lite`.
+- Gemini rejects request deadlines under 10 s, so the 2.5 s limit made every call fail. The cut-off is now enforced
+  on our side with a thread future (3 s); a slower answer is dropped.
+- Answers took 2 to 3 s. Two fixes measured live: `thinking_level="minimal"` (about 0.7 s on a short prompt) and
+  reusing one client instead of a new connection per question (about 1 s once warm). The connection is opened in
+  the background when a session starts. A cold first call can still take 3 s.
+- Gemini once answered "मुझे नहीं पता" (I do not know) instead of an empty reply; such answers are now dropped.
+- "32.8" was read as "बत्तीस.आठ"; decimals are now spoken as "बत्तीस दशमलव आठ".
+- A scripted edit again broke a string (a literal newline inside a quote); found by the import error and fixed by
+  hand. Scripted multi-line edits are now done with the editor instead.
+- Tests never call Gemini, even with a key in `.env` (`tests/conftest.py`).
+
+### In progress
+- Real phone call channel (Twilio), once the paid account is set up.

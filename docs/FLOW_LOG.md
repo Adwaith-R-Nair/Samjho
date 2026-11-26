@@ -8,3 +8,4 @@ each session and what came out of it. It is the source for the Round 2 "how we u
 |---|---|---|
 | 27 Nov | Read the Round 2 brief and rules on the dashboard; compare extending Round 1 against new ideas with ChatGPT, Gemini and Claude; pick the strongest | Decision: extend Samjho as "her voice, not her thumb" |
 | 27 to 28 Nov | Set up Twilio, Sarvam, Gemini and hosting; start the build phase by phase in the Praman commit style | First commit: app starts with no keys, CI boots it from a fresh clone |
+| 28 Nov | Tested "Talk in the browser" with his own voice and dictated what went wrong: every question got "the lender will answer" | Three-layer question answering (fixed answers, fenced Gemini, move on after three questions) |

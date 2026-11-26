@@ -78,11 +78,15 @@ def faq(loan: Loan) -> list[tuple[str, dict]]:
     ]
 
 
-def unknown_question() -> dict:
+def noted_for_lender() -> dict:
     return L(
-        "यह सवाल मैं लिख रही हूँ, लेंडर आपको इसका जवाब देगा। कोई और सवाल? नहीं तो 'आगे' बोलिए।",
-        "I am noting this question; the lender will answer it. Any other question? Otherwise say 'next'.",
+        "इसका पक्का जवाब लेंडर देगा, मैंने आपका सवाल लिख लिया है।",
+        "The lender will give you an exact answer to this; I have noted your question.",
     )
+
+
+def move_on() -> dict:
+    return L("अच्छे सवाल थे। चलिए, अब आगे बढ़ते हैं।", "Good questions. Let us move on now.")
 
 
 def ask_more() -> dict:

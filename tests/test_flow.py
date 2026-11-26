@@ -221,3 +221,47 @@ def test_record_counts_first_answers_and_the_result_after_repair():
 def test_schedule_is_quoted_in_her_words_not_our_label():
     assert grade("har mahine hazaar", SAMPLE_LOAN)["frequency"].quote == "har mahine"
     assert grade("mahine nahi, har hafte", SAMPLE_LOAN)["frequency"].quote == "har hafte"
+
+
+# ---- questions during the explanation (from Adwaith's first real-mic test, 28 Nov) ----------------
+def _ask(text):
+    s = Session()
+    s.start()
+    s.hear("haan")
+    return s, says(s.hear(text))
+
+
+@pytest.mark.parametrize(
+    "question,expect_en",
+    [
+        ("एक और बार मुझे इसके बारे में समझा सकते हो क्या? थोड़े और आसान भाषा में।", "slowly once more"),
+        ("ये मुझे कब तक चुकाना होगा?", "52 weeks"),
+        ("किस्त के अलावा अब कुछ कहोगी मुझसे? इसके बारे में।", "Besides the instalment"),
+        ("samajh nahi aaya", "slowly once more"),
+        ("haath mein kitne milenge?", "Rs 48,410 reaches your hand"),
+        ("bima kyun lagta hai?", "insurance"),
+    ],
+)
+def test_real_questions_get_real_answers(question, expect_en):
+    s, said = _ask(question)
+    assert expect_en.lower() in said[0]["en"].lower()
+    assert s.state == "explain"
+
+
+def test_after_three_questions_samjho_moves_on_to_the_teachback():
+    s = Session()
+    s.start()
+    s.hear("haan")
+    s.hear("kab tak chukana hai?")
+    s.hear("aur kya?")
+    ev = s.hear("phir se samjhao")
+    assert s.state == "teachback"
+    assert "move on" in " ".join(e["en"] for e in says(ev)).lower()
+
+
+def test_generated_answers_may_only_use_the_loans_own_numbers():
+    from app.answer import numbers_are_from_the_loan
+
+    assert numbers_are_from_the_loan("हर हफ्ते 1095 रुपये, 52 हफ्ते तक", SAMPLE_LOAN)
+    assert not numbers_are_from_the_loan("हर महीने 4,500 रुपये", SAMPLE_LOAN)
+    assert not numbers_are_from_the_loan("The penalty is Rs 200", SAMPLE_LOAN)

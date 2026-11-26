@@ -12,11 +12,13 @@ import re
 import uuid
 
 from app import lines
+from app.answer import answer, fixed_answer, warm
 from app.grade import Verdict, grade
 from app.loan import FACTS, SAMPLE_LOAN, Loan
 from app.record import Ledger
 
 MAX_ROUNDS = 2
+MAX_QUESTIONS = 3  # after this many questions Samjho gently moves on to the teach-back
 
 _YES = re.compile(
     r"\b(haan|haa|han|ha|hanji|haanji|ji|jee|yes|yeah|yep|ok|okay|theek|thik|bilkul|sahmat|shuru|chalo|sure)\b|हाँ|हां|जी|ठीक|सहमत|बिल्कुल",
@@ -57,6 +59,7 @@ class Session:
         self.asked: set[str] = set()
         self.target: str | None = None
         self.questions: list[str] = []
+        self.questions_asked = 0
         self.extra_money_reported: bool | None = None
         self.consent: str | None = None
         self.ledger = Ledger()
@@ -107,6 +110,7 @@ class Session:
 
     def start(self) -> list[dict]:
         self.ledger.append("session_start", loan_id=self.loan.loan_id, lang=self.lang)
+        warm()
         self._state("consent")
         self._say(lines.intro())
         return self._flush()
@@ -139,16 +143,29 @@ class Session:
             self._finish()
 
     def _on_explain(self, text: str) -> None:
-        if _QUESTION.search(text) and not re.fullmatch(r"\W*(aage|next|आगे)\W*", text, re.IGNORECASE):
-            for pattern, answer in lines.faq(self.loan):
-                if re.search(pattern, text, re.IGNORECASE):
-                    self._say(answer)
-                    self._say(lines.ask_more())
-                    return
+        fixed = fixed_answer(text, self.loan)
+        if fixed is None and _MOVE_ON.search(text) and not _QUESTION.search(text):
+            self._to_teachback()
+            return
+        line, source = (fixed, "fixed") if fixed else answer(text, self.loan)
+        self.questions_asked += 1
+        if line:
+            self.ledger.append("answered", question=text, source=source)
+            self._say(line)
+        elif _QUESTION.search(text):
             self.questions.append(text)
             self.ledger.append("question_for_lender", text=text)
-            self._say(lines.unknown_question())
+            self._say(lines.noted_for_lender())
+        else:
+            self._to_teachback()  # a statement, not a question: carry on
             return
+        if self.questions_asked >= MAX_QUESTIONS:
+            self._say(lines.move_on())
+            self._to_teachback()
+        else:
+            self._say(lines.ask_more())
+
+    def _to_teachback(self) -> None:
         self._state("teachback")
         self._say(lines.teachback())
 
