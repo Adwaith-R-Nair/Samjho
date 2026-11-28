@@ -22,3 +22,8 @@ scratch/
 
 # Consented demo replays are published on purpose (see replays/README.md)
 !replays/**/*.wav
+
+# Design tooling installed locally (Impeccable for Copilot); not part of Samjho
+.github/agents/
+.github/hooks/
+.github/skills/
