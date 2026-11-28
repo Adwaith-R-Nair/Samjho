@@ -81,7 +81,8 @@ def _intents(loan: Loan) -> list[tuple[str, dict]]:
             ),
         ),
         (
-            r"kisht|kist|qist|emi|instal+ment|har hafte kitna|किस्त|हर हफ्ते कितना",
+            r"kisht|kist|qist|emi|instal+ment|har hafte kitna|kitne (?:rupaye|rupay|paise) (?:jama|bharne|dene)|kitna jama|"
+            r"किस्त|हर हफ्ते कितना|कितने रुपये (?:जमा|भरने|देने)|कितना जमा",
             L(
                 f"हर हफ्ते {rupees_hi(loan.instalment)} की किस्त है, {weeks_hi} हफ्ते तक। महीने में नहीं, हर हफ्ते।",
                 f"The instalment is {rupees_en(loan.instalment)} every week for {loan.instalments} weeks. Every week, not every month.",

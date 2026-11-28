@@ -308,3 +308,23 @@ def test_a_fact_handed_to_a_callback_is_not_graded_or_announced_again():
     ev = s.hear("pachaas hazaar haath mein aur kisht 900")
     assert facts(ev).get("cash_in_hand") != "red"
     assert not any(e["type"] == "case" and "cash" in e.get("detail", "") for e in ev)
+
+
+# ---- from the second real phone call (28 Nov): a full session to the sealed record ------------
+def test_the_loan_amount_said_first_does_not_block_her_cash_in_hand_answer():
+    text = "हफ्ते। 50,000 रुपये में से। 1590. कम करने के बाद। बाकी 48410 रुपये हाथ में आएंगे। और उसके बाद 52 हफ्तों तक 1000।"
+    v = grade(text, SAMPLE_LOAN, None)
+    assert v["cash_in_hand"].status == "green" and v["cash_in_hand"].said == 48410
+    assert v["deductions"].status == "green"
+
+
+def test_a_cued_wrong_amount_still_counts_as_her_answer():
+    # The classic miss must stay red: her own cue word, her own wrong number.
+    assert grade("pachaas hazaar haath mein aayenge", SAMPLE_LOAN, None)["cash_in_hand"].status == "red"
+
+
+def test_how_much_to_deposit_gets_the_fixed_instalment_answer():
+    from app.answer import answer
+
+    line, source = answer("हफ्ते। 52 हफ्तों तक कितने रुपये जमा करना है?", SAMPLE_LOAN)
+    assert source == "fixed" and "1,095" in line["en"]

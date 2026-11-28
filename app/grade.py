@@ -157,7 +157,10 @@ def assign(text: str, loan: Loan, target: str | None = None) -> dict[str, Eviden
             if n.value <= loan.sanctioned * _MAX_DEDUCTION_SHARE:
                 deduction_parts.append(n)
             continue
-        if cue in found:  # keep the first thing she said about a fact
+        # Keep the first thing she said about a fact, unless that was only a guess by size and this one has
+        # her own cue word: in "50,000 mein se 1590 kam, baaki 48410 haath mein" the 50,000 is the loan, and
+        # 48,410 "haath mein" is her answer (second real call, 28 Nov).
+        if cue in found and not (found[cue].guessed and not guessed):
             continue
         found[cue] = Evidence(cue, n.value, n.raw, n.confident, n.alternatives, guessed)
 

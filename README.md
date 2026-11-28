@@ -18,7 +18,7 @@ Wispr Flow. Theme: Livelihoods and small business. The loan and the people are s
 |---|---|---|
 | Talk in the browser | Speak Hindi, Hinglish or English; Samjho answers in a Hindi or English (India) voice. Sarvam speech-to-text and text-to-speech on Pipecat | `app/voice.py`, `app/browser_serializer.py`, `web/voice.js` |
 | Type instead | The same conversation and the same checks, no microphone, no keys | `POST /api/text/*` in `app/main.py` |
-| Real phone call | Twilio calls any Indian mobile and the same conversation runs at 8 kHz; she can interrupt, is muted only while amounts are read; the requesting browser follows the call live. Rate limits, consent and a kill switch protect a public link. Proven on a real call from a US Twilio number to an Indian mobile (28 Nov), after a full simulated call | `app/phone.py`, `app/limits.py`, `web/phone.js` |
+| Real phone call | Twilio calls any Indian mobile and the same conversation runs at 8 kHz; she can interrupt, is muted only while amounts are read; the requesting browser follows the call live. Rate limits, consent and a kill switch protect a public link. Proven on real calls from a US Twilio number to an Indian mobile (28 Nov), one run to the sealed record | `app/phone.py`, `app/limits.py`, `web/phone.js` |
 | Her questions | Asked during the explanation: fixed answers for what borrowers ask (again and slower, how long, cash in hand, total, what else); anything else goes to Gemini fenced to the loan's own facts and numbers, or is noted for the lender | `app/answer.py` |
 | The conversation | Consent, the loan in four short lines with questions allowed, "explain it to your daughter", then for each fact she missed: ask, re-explain with her own words and figures, re-check with a fresh question; two rounds, then a human callback (never a block) | `app/flow.py`, `app/lines.py` |
 | Checked in code | Five facts (cash in hand, deductions, instalment, how often, total) judged against the loan with fixed tolerances. A word phone audio often swaps ("pachaas" or "pachpan") triggers a re-ask only when the other reading would change the verdict | `app/grade.py`, `app/loan.py` |
@@ -38,11 +38,12 @@ hosted live link. See [docs/ROADMAP.md](docs/ROADMAP.md).
 - **Reply time in the browser: about 1.05 s** after a yes or no and **about 1.3 s** after a number answer, from the
   end of her speech to the first reply audio, measured with live Sarvam by `scripts/voice_smoke.py`. Of that, 0.6 s
   or 0.9 s is a deliberate wait so she can finish ("pachaas ... hazaar").
-- **Reply time on a real phone call: median 1.35 s** (1.32 s to 1.48 s over 11 turns), Twilio to an Indian
-  mobile through a tunnel to a laptop in Bengaluru, measured on the first real call. One more reading (16.4 s) was a
-  timing error, not a pause: the clock had started at a sound made during the greeting; such readings are now
-  dropped.
-- **667 automated tests**, run on every push with a fresh-clone docker boot.
+- **Reply time on real phone calls: median 1.34 s** over 22 turns on two calls (about 1.05 s after a yes or no,
+  about 1.35 s after a number), Twilio to an Indian mobile through a tunnel to a laptop in Bengaluru. One question
+  answered by Gemini took 2.54 s; that question now has a fixed answer. The second call ran a full session to the
+  sealed record in about 4 minutes. One early reading (16.4 s) was a timing error, not a pause: the clock had
+  started at a sound made during the greeting; such readings are now dropped.
+- **670 automated tests**, run on every push with a fresh-clone docker boot.
 
 ## Run it
 

@@ -257,7 +257,25 @@ What broke, and the fix for each (tests use the exact transcripts):
 
 Not yet proven: hang-up through Twilio's API mid-session, and a full session to the sealed record on a real line.
 
+### Commit 14: the second real call reaches the sealed record
+28 Nov, about 11:06 pm, same setup, with commit 13's fixes. The whole flow ran on a real line in about 4 minutes:
+consent, explanation, two questions, teach-back, repair of the facts he got wrong, all five facts green, the
+private question (he answered "haan", so a HOLD_REVIEW case went to the grievance officer), final consent, and the
+sealed record. Reply time over 11 turns: 1.03 s to 1.45 s, plus one question at 2.54 s. No stale 16 s reading.
+
+Commit 13's fixes held on new audio: "1052 रुपये। 95 रुपये।" (speech to text's version of "ek hazaar pachaanve")
+graded within tolerance, and "56,940." answered the total.
+
+What broke, and the fix for each (tests use the exact transcripts):
+1. His teach-back was "50,000 रुपये में से। 1590. कम करने के बाद। बाकी 48410 रुपये हाथ में आएंगे". The 50,000 (the loan
+   size) had no cue word, so it was placed by size as cash in hand and marked red; the 48,410 that came with
+   "haath mein" was then ignored because the fact was already taken. A guess by size now gives way to a later
+   number that has her own cue word. A cued wrong answer ("pachaas hazaar haath mein") still counts and stays red.
+2. "52 हफ्तों तक कितने रुपये जमा करना है?" went to Gemini (2.54 s) though the instalment has a fixed answer. "kitne
+   rupaye jama / bharne / dene" and "कितने रुपये जमा" now get the fixed answer.
+
+Across both calls: median 1.34 s over 22 turns (about 1.05 s after yes or no, about 1.35 s after a number).
+
 ### In progress
-- A second real call to run a full session to the seal, with the fixes above.
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).
