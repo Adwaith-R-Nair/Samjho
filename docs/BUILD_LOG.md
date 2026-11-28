@@ -291,6 +291,16 @@ Also learned: the teach-back prompt does not ask about deductions, so a correct 
 as right first time. A script that wants "2 of 5" on the card must answer that question wrong first. Writing a heredoc
 edit turned `\b` into a backspace character again; the hygiene test caught it and the lines were rewritten safely.
 
+### Commit 16: natural schedule answers, and an honest goodbye
+From rehearsing the demo video's exact lines through the app:
+1. Samjho re-checks the schedule with "If you pay this Monday, when is the next instalment due?". The most natural
+   answer, "agle somvaar" (next Monday), was not read as a schedule, so a borrower who understood would be
+   re-explained and could end in a callback. When Samjho has just asked about the schedule, "next Monday", "saat din
+   baad" (after seven days) and "ek hafte baad" now mean weekly, and "next month" means monthly (and is caught as
+   wrong). Without that question, a day on its own is not read as a schedule.
+2. The goodbye always said "Your questions will reach the lender", even when she had none. It now says so only when
+   questions were passed to the lender.
+
 ### In progress
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).

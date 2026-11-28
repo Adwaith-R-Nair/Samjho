@@ -212,10 +212,16 @@ def consent() -> dict:
     )
 
 
-def sealed() -> dict:
+def sealed(questions_for_lender: bool = False) -> dict:
+    """Only promise that questions reach the lender when she left some."""
+    if questions_for_lender:
+        return L(
+            "शुक्रिया। आपकी समझ और आपकी सहमति का रिकॉर्ड बन गया है। आपके सवाल लेंडर तक पहुँचेंगे। नमस्ते।",
+            "Thank you. A record of what you understood and your consent has been sealed. Your questions will reach the lender. Goodbye.",
+        )
     return L(
-        "शुक्रिया। आपकी समझ और आपकी सहमति का रिकॉर्ड बन गया है। आपके सवाल लेंडर तक पहुँचेंगे। नमस्ते।",
-        "Thank you. A record of what you understood and your consent has been sealed. Your questions will reach the lender. Goodbye.",
+        "शुक्रिया। आपकी समझ और आपकी सहमति का रिकॉर्ड बन गया है। नमस्ते।",
+        "Thank you. A record of what you understood and your consent has been sealed. Goodbye.",
     )
 
 

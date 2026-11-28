@@ -238,7 +238,7 @@ class Session:
             return
         self.consent = "given" if answer else "declined"
         self.ledger.append("consent", value=self.consent, words=text)
-        self._say(lines.sealed() if answer else lines.declined())
+        self._say(lines.sealed(bool(self.questions)) if answer else lines.declined())
         self._finish()
 
     def _finish(self) -> None:

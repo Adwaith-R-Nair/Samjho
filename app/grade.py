@@ -38,6 +38,20 @@ _FREQ_WORDS = re.compile(
     re.IGNORECASE,
 )
 _MAX_DEDUCTION_SHARE = 0.2  # a "deduction" bigger than this share of the loan is not a deduction
+_DAYS = (
+    r"(?:somvar|somvaar|mangalvar|mangalvaar|budhvar|budhvaar|guruvar|guruvaar|shukravar|shukravaar|shanivar|"
+    r"shanivaar|ravivar|ravivaar|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"सोमवार|मंगलवार|बुधवार|गुरुवार|शुक्रवार|शनिवार|रविवार)"
+)
+# Only read when Samjho just asked about the schedule ("next Monday" means weekly, "next month" monthly).
+_NEXT_WEEK = re.compile(
+    rf"(?:agle|agla|next|अगले|अगला)\s+{_DAYS}|(?:saat|7|सात)\s+(?:din|दिन|days)|"
+    r"(?:ek|1|एक)\s+(?:hafte|हफ्ते|हफ़्ते|week)\s+(?:baad|बाद|later)",
+    re.IGNORECASE,
+)
+_NEXT_MONTH = re.compile(
+    r"(?:agle|agla|next|अगले|अगला)\s+(?:mahine|month|महीने)|(?:tees|30|तीस)\s+(?:din|दिन|days)", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -171,6 +185,12 @@ def assign(text: str, loan: Loan, target: str | None = None) -> dict[str, Eviden
         found["deductions"] = Evidence("deductions", total, quote, confident, (), False, len(deduction_parts))
 
     freq = parse_frequency(text)
+    if freq is None and target == "frequency":
+        # Asked "if you pay this Monday, when is the next one due?", the natural answer is a day, not a schedule.
+        if _NEXT_WEEK.search(text):
+            freq = "weekly"
+        elif _NEXT_MONTH.search(text):
+            freq = "monthly"
     if freq:
         found["frequency"] = Evidence("frequency", freq, _freq_quote(text, freq))
     return found

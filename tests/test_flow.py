@@ -383,3 +383,27 @@ def test_na_on_its_own_is_no(text):
 
 def test_na_inside_a_word_is_not_no():
     assert yes_no("नाम बताइए") is None
+
+
+# ---- natural answers to "if you pay this Monday, when is the next one due?" -------------------
+@pytest.mark.parametrize(
+    "text,expected",
+    [("अगले सोमवार", "green"), ("agle somvaar ko", "green"), ("next Monday", "green"), ("सात दिन बाद", "green"),
+     ("अगले महीने", "red"), ("next month", "red")],
+)
+def test_a_day_answers_the_schedule_question(text, expected):
+    assert grade(text, SAMPLE_LOAN, "frequency")["frequency"].status == expected
+
+
+def test_a_day_alone_is_not_a_schedule_when_nobody_asked():
+    assert "frequency" not in {k for k, v in grade("अगले सोमवार", SAMPLE_LOAN, None).items() if v.status != "grey"}
+
+
+def test_goodbye_only_promises_questions_reach_the_lender_when_there_are_some():
+    s = Session()
+    to_teachback(s)
+    s.hear("adtaalis hazaar chaar sau das haath mein, pandrah sau nabbe kategi, har hafte ek hazaar pachaanve, kul chhappan hazaar nau sau chaalees")
+    s.hear("नहीं")
+    ev = s.hear("हाँ, मैं समझ गई और सहमत हूँ")
+    bye = " ".join(e["en"] for e in says(ev))
+    assert "sealed" in bye and "questions will reach" not in bye
