@@ -27,7 +27,7 @@ from app.limits import CallLimiter
 from app.recording import has_replays
 
 PHONE_RE = re.compile(r"^\+91[6-9]\d{9}$")
-CALL_TIME_LIMIT = 300  # seconds, Twilio hangs up after this; a full session with repairs can pass 4 minutes
+CALL_TIME_LIMIT = 480  # seconds, Twilio hangs up after this; the first real call (two "say it again" requests) ran past 5 minutes
 RING_TIMEOUT = 30  # seconds the phone rings before Twilio gives up
 TOKEN_TTL = 120  # seconds from placing the call to its stream connecting
 HISTORY_MAX = 500

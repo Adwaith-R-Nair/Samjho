@@ -220,7 +220,7 @@ def test_call_placed_with_twiml_limits_and_watch_id(env, fake):
     assert body["ok"] and body["call_id"] == "CA...4321" and body["to"] == "+91XXXXXX3210"
     (made,) = fake.twilio.made
     assert made["to"] == GOOD and made["from_"] == "+15550001111"
-    assert made["time_limit"] == 300 and made["timeout"] == 30
+    assert made["time_limit"] == 480 and made["timeout"] == 30
     assert 'url="wss://demo.example.com/ws/twilio"' in made["twiml"]
     (token,) = list(fake.desk._pending)
     assert f'value="{token}"' in made["twiml"]

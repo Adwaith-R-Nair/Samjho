@@ -103,3 +103,13 @@ def test_brain_sends_events_speaks_one_utterance_and_ends_when_done():
     pushed.clear()
     run(brain._on_turn("haan"))  # nothing after the session is sealed
     assert pushed == []
+
+
+def test_a_latency_reading_older_than_the_turn_is_dropped():
+    from app.voice import plausible_latency
+
+    # First real call: the clock started at "hello" during the greeting and read 16.4 s, though the
+    # reply came 0.28 s after the turn was handed over.
+    assert not plausible_latency(16.393, last_turn_at=100.0, now=100.28)
+    assert plausible_latency(1.354, last_turn_at=100.0, now=100.25)
+    assert not plausible_latency(0.5, last_turn_at=None, now=5.0)  # greeting, no turn yet

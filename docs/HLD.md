@@ -147,7 +147,7 @@ sequenceDiagram
 
     B->>API: POST /api/call {phone, consent, lang, k}
     API->>D: place(): kill switch, keys, access code, consent, number, limits
-    D->>T: calls.create(TwiML Stream to /ws/twilio with one-time token, 300 s limit)
+    D->>T: calls.create(TwiML Stream to /ws/twilio with one-time token, 480 s limit)
     D-->>B: {watch_id}
     B->>API: WS /ws/watch?id=watch_id
     T->>API: WS /ws/twilio (8 kHz mulaw)
@@ -185,7 +185,7 @@ in process memory, and a restart clears them.
 | Phone numbers | Only `+91[6-9]` plus 9 digits accepted. Kept only as salted HMAC hashes (salt random per process) for the limits; logged masked (`+91XXXXXX1234`) |
 | Data sent to providers | Voice audio to Sarvam; call audio through Twilio; when a Gemini key is set, the text of a question not covered by the fixed answers, with the loan's facts, to Google |
 | Recordings | None made. `.gitignore` excludes `*.wav`, `*.mp3`, `recordings/`. Replays only from consenting testers (Planned) |
-| Calls | Consent checkbox required; optional `JUDGE_TOKEN` access code (constant-time compare); `CALLS_ENABLED` read on every request; one-time stream token, valid 120 s and bound to the call SID, so nobody else can attach to a call; calls end after 300 s |
+| Calls | Consent checkbox required; optional `JUDGE_TOKEN` access code (constant-time compare); `CALLS_ENABLED` read on every request; one-time stream token, valid 120 s and bound to the call SID, so nobody else can attach to a call; calls end after 480 s |
 | Abuse limits | Per number 1 call per 30 min and 3 per day; per IP 3 per hour; 2 calls at once and 40 per day overall; owner numbers skip only the per-number and per-IP limits; at most 4 live browser voice sessions, each up to 5 minutes |
 | Client IP | Taken from the socket; `CF-Connecting-IP` or `X-Forwarded-For` are trusted only when the request comes from loopback (a local tunnel) |
 | Input handling | Typed text truncated to 500 characters. The UI inserts user text with `textContent` or an HTML escape |

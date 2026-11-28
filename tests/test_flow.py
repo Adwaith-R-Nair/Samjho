@@ -271,3 +271,40 @@ def test_a_recorded_session_says_so_aloud_before_anything_else():
     first = says(Session(recording=True).start())[0]
     assert "recorded for a demo" in first["en"] and "रिकॉर्ड" in first["hi"]
     assert "recorded" not in says(Session().start())[0]["en"]
+
+
+# ---- from the first real phone call (28 Nov, the builder testing on his own mobile) ----------
+# Speech to text wrote these exact strings; each one exposed a grading bug.
+def test_an_amount_cut_at_a_pause_is_read_as_one_amount():
+    v = grade("1000. 95 रुपये।", SAMPLE_LOAN, "instalment")
+    assert v["instalment"].status == "green" and v["instalment"].said == 1095
+    assert grade("48,000. 410", SAMPLE_LOAN, "cash_in_hand")["cash_in_hand"].said == 48410
+
+
+def test_a_comma_is_a_list_not_one_amount():
+    v = grade("1000, 95 रुपये", SAMPLE_LOAN, None)
+    assert all(x.said != 1095 for x in v.values())
+
+
+def test_a_small_number_before_a_round_one_is_not_joined():
+    v = grade("ठीक है तो. 13. 50,000 रुपये मिलेंगे।", SAMPLE_LOAN, None)
+    assert v["cash_in_hand"].said == 50000
+
+
+def test_one_number_answers_the_question_even_with_a_loose_word():
+    # Asked for the total, he said "56,000 kisht": closer to the total than to an instalment.
+    v = grade("56,000 किस्त।", SAMPLE_LOAN, "total")
+    assert v["total"].status == "green" and v["total"].said == 56000
+    # But a number that fits the cued fact still goes there.
+    assert grade("हर किस्त 1095", SAMPLE_LOAN, "total")["instalment"].status == "green"
+
+
+def test_a_fact_handed_to_a_callback_is_not_graded_or_announced_again():
+    s = Session()
+    to_teachback(s)
+    s.hear("pachaas hazaar haath mein")
+    s.hear("pachaas hazaar")
+    s.hear("pachaas hazaar")  # cash in hand now unclear, one CALLBACK
+    ev = s.hear("pachaas hazaar haath mein aur kisht 900")
+    assert facts(ev).get("cash_in_hand") != "red"
+    assert not any(e["type"] == "case" and "cash" in e.get("detail", "") for e in ev)

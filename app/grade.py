@@ -106,20 +106,51 @@ def _closest_by_size(loan: Loan, value: float) -> str | None:
     return best
 
 
+def _gap(loan: Loan, fact: str, value: float) -> float:
+    t = truth(loan, fact)
+    return abs(value - t) / t
+
+
+# Between "1000" and "95" in "1000. 95": speech to text sometimes cuts one spoken amount ("ek hazaar
+# pachaanve") at a pause. Only a full stop or space may sit between the parts; a comma is a list.
+_SPLIT_GAP = re.compile(r"^[\s.।]+$")
+
+
+def _join_split_amounts(text: str, numbers: list[ParsedNumber]) -> list[ParsedNumber]:
+    """Rejoin "1000. 95" into 1095: a round thousand (or hundred) then a smaller number after a pause."""
+    out: list[ParsedNumber] = []
+    for n in numbers:
+        prev = out[-1] if out else None
+        if prev is not None and _SPLIT_GAP.match(text[prev.end : n.start] or "x"):
+            unit = 1000 if prev.value >= 1000 and prev.value % 1000 == 0 else 100 if prev.value % 100 == 0 else 0
+            if unit and 0 < n.value < unit and n.value == int(n.value):
+                out[-1] = ParsedNumber(
+                    prev.value + n.value, text[prev.start : n.end], prev.start, n.end, prev.confident and n.confident, ()
+                )
+                continue
+        out.append(n)
+    return out
+
+
 def assign(text: str, loan: Loan, target: str | None = None) -> dict[str, Evidence]:
     """Map her words to facts. `target` is the fact Samjho just asked about, if any."""
     found: dict[str, Evidence] = {}
-    numbers = [n for n in parse_numbers(text) if not _is_count(text, n)]
+    numbers = _join_split_amounts(text, [n for n in parse_numbers(text) if not _is_count(text, n)])
 
     deduction_parts: list[ParsedNumber] = []
     for n in numbers:
         cue = _nearest_cue(text, n)
         guessed = False
+        answering = target and target != "frequency" and len(numbers) == 1
         if cue is None:
-            if target and target != "frequency" and len(numbers) == 1:
+            if answering:
                 cue = target
             else:
                 cue, guessed = _closest_by_size(loan, n.value), True
+        elif answering and cue != target and _gap(loan, target, n.value) < _gap(loan, cue, n.value):
+            # Asked for the total, she says "56,000 kisht": one number, closer to what was asked than to
+            # the fact her loose word points at. It answers the question.
+            cue = target
         if cue is None:
             continue
         if cue == "deductions":

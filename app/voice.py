@@ -82,7 +82,7 @@ YES_NO_STATES = {"consent", "private", "final_consent"}
 
 # Mic audio stays muted this long after the bot stops, so the tail of its voice is not heard as the user.
 ECHO_TAIL_SECS = 0.25
-SESSION_TIMEOUT_SECS = 300
+SESSION_TIMEOUT_SECS = 480
 MAX_SESSIONS = 4
 # Words needed to interrupt the bot on the phone.
 BARGE_IN_MIN_WORDS = 2
@@ -92,6 +92,17 @@ _AMOUNT = re.compile(r"\d|रुपये|रुपए|\bRs\b")
 _active = 0
 
 Publish = Callable[[dict], Awaitable[None] | None]
+
+# From the end of her speech to the turn being handed over: speech timeout (up to 0.9 s) plus the last
+# transcript. A reading longer than that plus the time since the turn arrived started before the turn.
+_TURN_RELEASE_MAX_SECS = 3.0
+
+
+def plausible_latency(seconds: float, last_turn_at: float | None, now: float) -> bool:
+    """False for a reading timed from a sound she made before this turn (for example while Samjho spoke)."""
+    if last_turn_at is None:
+        return False
+    return seconds <= (now - last_turn_at) + _TURN_RELEASE_MAX_SECS
 
 
 @dataclass(frozen=True)
@@ -202,6 +213,7 @@ class Brain(FrameProcessor):
         self.session = session
         self.recorder = recorder
         self.turn = 0
+        self.last_turn_at: float | None = None
         self.critical = False
         self._publish = publish
         self._ending = False
@@ -224,6 +236,7 @@ class Brain(FrameProcessor):
         if self.session.done or self._ending:
             return
         self.turn += 1
+        self.last_turn_at = time.monotonic()
         logger.info(f"Samjho voice turn {self.turn} [{self.session.state}]: {text!r}")
         # Off the event loop: a question can take up to 3 s (Gemini), audio and the serializer keep flowing.
         await self._emit(await asyncio.to_thread(self.session.hear, text))
@@ -343,6 +356,11 @@ def build_worker(
     @latency.event_handler("on_latency_measured")
     async def on_latency(_observer, seconds: float) -> None:
         ms = round(seconds * 1000)
+        if not plausible_latency(seconds, brain.last_turn_at, time.monotonic()):
+            # The clock started at a sound she made while Samjho was still talking (on the first real call,
+            # "hello" during the greeting gave 16.4 s for a reply that took about 1.3 s). Not a real turn.
+            logger.info(f"Samjho {profile.name} turn {brain.turn}: dropped a stale reading of {ms} ms")
+            return
         logger.info(f"Samjho {profile.name} turn {brain.turn}: {ms} ms end of speech to first bot audio")
         ev = {"type": "latency", "turn": brain.turn, "ms": ms}
         if publish is None:

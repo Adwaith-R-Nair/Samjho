@@ -225,7 +225,39 @@ latency strip if it happens; to watch in real sessions.
 Known limits: a 5-minute session is about 10 MB of WAV in git; the audio runs on for a few seconds after the last
 event, until the socket closes.
 
+### Commit 13: the first real phone call, and the four bugs it found
+28 Nov, about 10:52 pm. Twilio account upgraded, Individual compliance profile approved the same day, a US local
+number bought (Voice only; A2P SMS registration and SHAKEN/STIR skipped, both are for US messaging or US callees).
+India was already enabled in Voice Geo Permissions. The app ran on the laptop behind a Cloudflare quick tunnel
+(`cloudflared` 2026.11.2). `scripts/call_smoke.py` rang the builder's own mobile; he played a borrower in Hindi.
+
+What worked on a real line: the call connected, Samjho was heard clearly, Sarvam transcribed phone audio well
+(Hinglish like "52 weeks tak chalega" and "एक बार और बता सकते हो" came through), questions got answers, barge-in
+and muting behaved, and the lender-side panel followed the call live.
+
+Measured: reply time median **1.35 s** over 11 turns (1.32 s to 1.48 s). Sarvam speech-to-text first byte 0.28 s to
+0.52 s, text-to-speech first byte 0.23 s to 0.52 s.
+
+What broke, and the fix for each (tests use the exact transcripts):
+1. "एक हज़ार पचानवे" came back from speech-to-text as **"1000. 95"**: a pause cut one amount in two, so 1,095
+   was read as 1,000 and 95, judged "close, not exact", and the instalment went to a callback though he had it
+   right. `grade._join_split_amounts` rejoins a round thousand (or hundred) followed, after only a full stop or a
+   space, by a smaller number. A comma still separates ("1000, 95" stays two numbers).
+2. Asked for the total, he said **"56,000 किस्त"**. The word "kisht" pulled the number to the instalment, so
+   the total stayed unanswered. Now a single number answering a question goes to the fact asked about when it is
+   closer to that fact's value than to the one the loose word points at.
+3. That misassigned number re-graded the instalment, which was already handed to a callback, and Samjho
+   announced the **same callback twice**. A fact closed for a callback is no longer re-graded in the check step.
+4. The first reply showed **16.4 s**. The server log shows the reply started 0.28 s after his turn was handed
+   over; Pipecat's latency clock had started at a sound he made during the greeting. Readings that start before
+   the turn they time are now dropped (`voice.plausible_latency`) instead of shown.
+5. The call hit the **5-minute limit** while still checking facts (he asked for the explanation twice, about 25 s
+   each), so it never reached the private question and consent. Call and session limits raised to 8 minutes
+   (under Rs 50 of Twilio time at India rates).
+
+Not yet proven: hang-up through Twilio's API mid-session, and a full session to the sealed record on a real line.
+
 ### In progress
-- First real phone call, once the Twilio account is paid.
+- A second real call to run a full session to the seal, with the fixes above.
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).

@@ -312,7 +312,7 @@ Typing sessions: in-memory, 30-minute idle expiry (`SESSION_TTL`), at most 200 (
 | Interruptions | None: `EchoGate` blanks mic audio while the bot speaks plus 0.25 s; `AlwaysUserMuteStrategy` | Allowed: `QuietVADStart` starts a turn on voice only while the bot is silent; while it speaks, `MinWordsUserTurnStartStrategy(min_words=2)` |
 | Amount read-outs | (already half duplex) | `CriticalReadoutMute` mutes, and `EchoGate(only_if=brain.critical)` blanks audio before speech-to-text, while a reply containing an amount (digits, "रुपये", "Rs") plays |
 | Events | Down the pipeline as JSON on the same socket | `publish` to the watch hub, never to Twilio |
-| Time limit | 300 s session timeout | Twilio `time_limit=300`, pipeline timeout 330 s |
+| Time limit | 480 s session timeout | Twilio `time_limit=480`, pipeline timeout 510 s |
 
 `Brain`: on start, emits `Session.start()` events; on each final user turn, runs `Session.hear(text)` in a worker
 thread; sends every event; speaks all `say` lines of one reply as one utterance (so the user is not unmuted
@@ -329,7 +329,7 @@ Browser client (`web/voice.js`, `web/mic-worklet.js`): AudioWorklet downsamples 
 `CallDesk.place(number, consent, lang, k, ip)` checks, in order: `CALLS_ENABLED`; Sarvam, Twilio and
 `PUBLIC_BASE_URL` set; `JUDGE_TOKEN` matches `k` if set (constant-time); consent ticked; number matches
 `^\+91[6-9]\d{9}$`; `CallLimiter.reserve()`. Then it creates a one-time token (`secrets.token_urlsafe(24)`) and a
-watch id, opens the watch channel, and calls Twilio `calls.create(to, from_, twiml, time_limit=300, timeout=30)`
+watch id, opens the watch channel, and calls Twilio `calls.create(to, from_, twiml, time_limit=480, timeout=30)`
 with TwiML `<Connect><Stream url="wss://HOST/ws/twilio"><Parameter name="t" .../>`. If the stream has not
 connected after `TOKEN_TTL = 120` s, the slot is released and the watcher told "not answered".
 

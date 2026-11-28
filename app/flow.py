@@ -180,7 +180,9 @@ class Session:
 
     def _on_check(self, text: str) -> None:
         for fact, v in grade(text, self.loan, self.target).items():
-            if fact == self.target or self.verdicts[fact].status != "green":
+            # A fact already handed to the lender for a callback stays closed; grading it again would
+            # announce the same callback twice (seen on the first real call).
+            if fact == self.target or self.verdicts[fact].status not in ("green", "unclear"):
                 self._fact(v)
         self._next()
 
