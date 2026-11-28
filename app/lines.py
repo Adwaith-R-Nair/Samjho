@@ -55,9 +55,15 @@ def faq(loan: Loan) -> list[tuple[str, dict]]:
     return [
         (
             r"bi+ma|bee?ma|insurance|बीमा",
+            # What it covers comes from the loan's own terms; with no cover stated, only the cost is given.
             L(
-                f"बीमा इसलिए है कि अगर आपको कुछ हो जाए, तो बाकी लोन बीमे से भरा जाए और परिवार पर बोझ न आए। इसका खर्च {rupees_hi(loan.insurance)} है।",
-                f"The insurance pays off the rest of the loan if something happens to you, so your family is not burdened. It costs {rupees_en(loan.insurance)}.",
+                f"बीमा इसलिए है कि {loan.insurance_cover[0]}। इसका खर्च {rupees_hi(loan.insurance)} है।",
+                f"The insurance is there so that {loan.insurance_cover[1]}. It costs {rupees_en(loan.insurance)}.",
+            )
+            if loan.insurance_cover
+            else L(
+                f"बीमे का खर्च {rupees_hi(loan.insurance)} है, जो लोन से पहले कटता है। यह किस चीज़ को कवर करता है, यह लेंडर बताएगा; मैंने आपका सवाल नोट कर लिया है।",
+                f"The insurance costs {rupees_en(loan.insurance)}, cut before you get the loan. What it covers, the lender will tell you; I have noted your question.",
             ),
         ),
         (

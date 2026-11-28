@@ -19,6 +19,9 @@ class Loan:
     total_repayable: int
     apr_percent: float
     grievance_contact: str = "Lender's grievance officer"
+    # What the insurance covers, as the Key Fact Statement states it (Hindi, English). Samjho only describes the
+    # cover when the loan says what it is; otherwise it gives the cost and notes the question for the lender.
+    insurance_cover: tuple[str, str] | None = None
     extra: dict = field(default_factory=dict)
 
     @property
@@ -41,6 +44,11 @@ SAMPLE_LOAN = Loan(
     instalments=52,
     total_repayable=56_940,
     apr_percent=32.8,
+    # Credit-life cover, the usual kind on a joint-liability microfinance loan; stated on the sample KFS.
+    insurance_cover=(
+        "अगर आपको कुछ हो जाए, तो बाकी लोन बीमे से भरा जाए और परिवार पर बोझ न आए",
+        "if something happens to you, the insurance pays off the rest of the loan, so your family is not burdened",
+    ),
 )
 
 # The five facts a borrower must say back. Order is the order Samjho asks about missing ones.

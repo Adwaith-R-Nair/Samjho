@@ -407,3 +407,14 @@ def test_goodbye_only_promises_questions_reach_the_lender_when_there_are_some():
     ev = s.hear("हाँ, मैं समझ गई और सहमत हूँ")
     bye = " ".join(e["en"] for e in says(ev))
     assert "sealed" in bye and "questions will reach" not in bye
+
+
+def test_insurance_cover_is_described_only_when_the_loan_states_it():
+    import dataclasses
+
+    from app.answer import fixed_answer
+
+    stated = fixed_answer("बीमा क्या है?", SAMPLE_LOAN)
+    assert "pays off the rest of the loan" in stated["en"] and "590" in stated["en"]
+    bare = fixed_answer("बीमा क्या है?", dataclasses.replace(SAMPLE_LOAN, insurance_cover=None))
+    assert "pays off" not in bare["en"] and "lender will tell you" in bare["en"] and "590" in bare["en"]
