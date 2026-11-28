@@ -174,7 +174,9 @@ function onFact(ev) {
   }
   Object.assign(f, { now: ev.status, quote: ev.quote, said: ev.said, again: ev.round || 0 });
   // With the number effect the row updates when her figure lands on it; otherwise at once.
-  if (window.samjhoFx) window.samjhoFx.fact(ev, { animate: !S.bulk, onArrive: () => renderFact(ev.fact) });
+  // Her figure assembles at the rhythm of her own answer when its loudness is known (voice, replay).
+  const energy = window.samjhoNotes?.lastHerEnvelope() || null;
+  if (window.samjhoFx) window.samjhoFx.fact(ev, { animate: !S.bulk, onArrive: () => renderFact(ev.fact), energy });
   else renderFact(ev.fact);
 }
 
@@ -230,18 +232,29 @@ function resetPanel() {
   setPill(mode === "replay" ? "replay" : "live");
   resetFacts();
   window.samjhoFx?.reset();
+  window.samjhoNotes?.reset();
   // Events handled in the same task as a reset (a replay seek re-renders everything at once) are not animated.
   S.bulk = true;
   clearTimeout(S.bulkT);
   S.bulkT = setTimeout(() => (S.bulk = false), 0);
 }
 
-// Shared by every channel: text, browser voice, phone and replay all emit the same events.
-function handleEvent(ev) {
+// Browser voice: her note appears while she speaks (web/js/voicenotes.js asks for it), before her words arrive.
+window.samjhoMakeHerNote = () => {
+  if (document.body.dataset.view !== "live") return null;
+  const li = addNote("user", "Listening...", null);
+  li.classList.add("pending");
+  return li;
+};
+
+// Shared by every channel: text, browser voice, phone and replay all emit the same events. t: the event's
+// time in a replay (seconds from the start of the recording).
+function handleEvent(ev, t) {
   switch (ev.type) {
     case "say": {
       const en = ev.en && ev.en !== ev.text ? ev.en : null;
       const li = addNote("bot", ev.text, en);
+      window.samjhoNotes?.say(li, ev.text, t);
       // The reply time belongs to the first line Samjho says after she spoke.
       if (S.awaitingReply) {
         S.awaitingReply = false;
@@ -251,12 +264,22 @@ function handleEvent(ev) {
       }
       break;
     }
-    case "heard":
-      addNote("user", ev.text, null);
+    case "heard": {
+      // The live note she has been speaking into takes her words; otherwise a new note.
+      const live = window.samjhoNotes?.claimHer();
+      let li = live;
+      if (live) {
+        live.classList.remove("pending");
+        const p = live.querySelector(".note-text");
+        p.textContent = ev.text;
+        p.lang = isHindi(ev.text) ? "hi" : "";
+      } else li = addNote("user", ev.text, null);
+      window.samjhoNotes?.heard(li, ev.text, t);
       S.awaitingReply = true;
       S.turnNote = null;
       S.pendingMs = null;
       break;
+    }
     case "fact":
       onFact(ev);
       break;
@@ -273,6 +296,7 @@ function handleEvent(ev) {
       break;
     }
     case "record":
+      window.samjhoNotes?.end();
       renderRecord(ev.record);
       $("say").hidden = true;
       window.samjhoFx?.seal(ev.record, { animate: !S.bulk });
@@ -305,6 +329,7 @@ function begin(m) {
   setStatus("");
   setPill(m === "replay" ? "replay" : "live");
   $("hint").hidden = !(m === "browser" || m === "text");
+  window.samjhoNotes?.begin(m === "browser" ? "voice" : m);
   showView("live");
 }
 

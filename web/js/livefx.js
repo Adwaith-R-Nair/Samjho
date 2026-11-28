@@ -246,7 +246,12 @@
     const col = RGB[fx.status].map((v) => Math.round(v * 255));
     const ox = cx - fx.w / 2;
     const oy = cy - fx.h / 2;
-    const sz = small() ? 1.7 : 2.0;
+    // Her voice's energy while the figure forms: her answer's envelope, swept across the assembly.
+    let en = 0.5;
+    if (fx.energy && t < A + H) en = fx.energy[Math.min(fx.energy.length - 1, Math.floor(clamp(t / (A + H)) * fx.energy.length))];
+    const shake = fx.energy ? 0.6 + 1.4 * en : 1;
+    const glow = fx.energy ? 0.8 + 0.4 * en : 1;
+    const sz = (small() ? 1.7 : 2.0) * (fx.energy ? 0.9 + 0.3 * en : 1);
     buckets[0].length = buckets[1].length = buckets[2].length = 0;
     const X = fx.X || (fx.X = new Float32Array(fx.n));
     const Y = fx.Y || (fx.Y = new Float32Array(fx.n));
@@ -263,10 +268,10 @@
         const e = expoOut(local);
         const sx = cx + fx.s[k * 2];
         const sy = cy + fx.s[k * 2 + 1];
-        const wob = (1 - e) * 7;
+        const wob = ((1 - e) * 7 + (fx.energy ? e * 1.2 : 0)) * shake;
         x = sx + (tx - sx) * e + Math.sin(t * 8 + k) * wob;
         y = sy + (ty - sy) * e + Math.cos(t * 7 + k * 1.3) * wob;
-        a = 0.18 + 0.82 * e;
+        a = Math.min(1, (0.18 + 0.82 * e) * glow);
         mix = smooth((local - 0.35) / 0.5);
       } else {
         const f = clamp((t - A - H - (k % 9) * 0.012) / F);
@@ -332,7 +337,9 @@
   }
 
   // ev: the server's fact event. onArrive renders the row; with the effect it runs when the grains land.
-  function fact(ev, { animate = true, onArrive = () => {} } = {}) {
+  // energy: her answer's loudness envelope (Float32Array, 0..1) when her voice was heard; the figure then
+  // assembles at the rhythm of what she said, its grains shaking and glowing with her voice.
+  function fact(ev, { animate = true, onArrive = () => {}, energy = null } = {}) {
     const i = FACT_KEYS.indexOf(ev.fact);
     if (i < 0) return onArrive();
     // The short arc at upper left keeps her first answer beside the ring's current verdict. It lights with
@@ -350,7 +357,8 @@
     };
     const fig = animate && animated() ? figureFor(ev) : null;
     if (!fig) return land(animate);
-    queue.push({ i, status: ev.status, row: rows()[i], ...fig, onArrive: () => land(true) });
+    const en = energy && energy.length && Math.max(...energy) > 0.05 ? energy : null;
+    queue.push({ i, status: ev.status, row: rows()[i], ...fig, energy: en, onArrive: () => land(true) });
     if (!cur) next();
   }
 

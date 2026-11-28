@@ -1,5 +1,9 @@
 // Replay of a recorded, consented session: plays its audio and feeds its UI events to window.samjhoHandleEvent
 // at the times they happened, so the transcript, fact chips and record appear in sync. Seeking re-renders.
+// The recording plays through an AudioContext (made inside the click that opens it) into two AnalyserNodes,
+// so the print and the voice notes move with it as in a live session. The file is one mono mix of both voices:
+// the voice notes say whose turn it is (speaker()), which opens that voice's analyser. Its loudness envelope
+// is also decoded once, so every voice note's waveform is the real recording, even after a seek.
 (() => {
   let box = null;
   let list = [];
@@ -8,6 +12,85 @@
   let timer = null;
   let audio = null;
   let wallStart = 0;
+  let ctx = null;
+  let an = null;
+  let gates = null;
+  let env = null; // { rate, data: Float32Array } loudness at 50 Hz, 0..1
+  let loadId = 0;
+
+  // Once per page, inside a user gesture: the <audio> element now plays through this graph.
+  function graph() {
+    if (ctx || !audio) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+    const src = ctx.createMediaElementSource(audio);
+    src.connect(ctx.destination);
+    const sink = ctx.createGain();
+    sink.gain.value = 0;
+    sink.connect(ctx.destination);
+    an = {};
+    gates = {};
+    for (const who of ["samjho", "her"]) {
+      const a = ctx.createAnalyser();
+      a.fftSize = 1024;
+      a.smoothingTimeConstant = 0.5;
+      a.minDecibels = -96;
+      a.maxDecibels = -22;
+      a.connect(sink);
+      const g = ctx.createGain();
+      g.gain.value = who === "samjho" ? 1 : 0;
+      src.connect(g).connect(a);
+      an[who] = a;
+      gates[who] = g;
+    }
+  }
+
+  function speaker(who) {
+    if (!gates) return;
+    gates.samjho.gain.setTargetAtTime(who === "her" ? 0 : 1, ctx.currentTime, 0.03);
+    gates.her.gain.setTargetAtTime(who === "her" ? 1 : 0, ctx.currentTime, 0.03);
+  }
+
+  // Loudness envelope of the recording (no gesture needed: an OfflineAudioContext only decodes).
+  async function loadEnvelope(url, id) {
+    try {
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const res = await fetch(url);
+      if (!OAC || !res.ok) return;
+      const buf = await new OAC(1, 1, 16000).decodeAudioData(await res.arrayBuffer());
+      const d = buf.getChannelData(0);
+      const hop = Math.round(buf.sampleRate / 50);
+      const n = Math.ceil(d.length / hop);
+      const data = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        let s = 0;
+        const a = i * hop;
+        const b = Math.min(d.length, a + hop);
+        for (let k = a; k < b; k++) s += d[k] * d[k];
+        data[i] = Math.sqrt(s / Math.max(1, b - a));
+      }
+      const ref = Array.from(data).sort((x, y) => x - y)[Math.floor(n * 0.95)] || 1;
+      for (let i = 0; i < n; i++) data[i] = Math.min(1, (data[i] / ref) * 0.85);
+      if (id === loadId) env = { rate: 50, data };
+    } catch (e) {
+      /* no waveforms; the replay itself still plays */
+    }
+  }
+
+  // n bars of the recording's loudness between s and e seconds (null until decoded).
+  function envelope(s, e, n) {
+    if (!env || !(e > s)) return null;
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor((s + ((e - s) * i) / n) * env.rate);
+      const b = Math.max(a + 1, Math.floor((s + ((e - s) * (i + 1)) / n) * env.rate));
+      let m = 0;
+      for (let k = a; k < b && k < env.data.length; k++) m = Math.max(m, env.data[k]);
+      out[i] = m;
+    }
+    return out;
+  }
 
   function ui() {
     if (box) return box;
@@ -24,6 +107,7 @@
       <p class="replay-badge" hidden style="color: var(--amber); font-weight: 700; margin: 8px 0"></p>
       <audio class="replay-audio" controls preload="auto" hidden style="width: 100%"></audio>`;
     box.querySelector(".replay-play").onclick = () => {
+      graph();
       const m = list[box.querySelector(".replay-select").selectedIndex];
       if (m) play(m).catch((e) => badge(e.message));
     };
@@ -60,8 +144,8 @@
 
   function dispatchUntil(t) {
     while (next < events.length && events[next].t <= t) {
-      const { t: _t, ...ev } = events[next++];
-      window.samjhoHandleEvent(ev);
+      const { t: at, ...ev } = events[next++];
+      window.samjhoHandleEvent(ev, at);
     }
   }
 
@@ -81,6 +165,22 @@
     }
     events = [];
     next = 0;
+    env = null;
+    loadId++;
+    if (an && window.samjhoField?.analysers.samjho === an.samjho) window.samjhoField.attach(null);
+  }
+
+  // Seek to t seconds (a voice note was tapped). The audio's seeked event re-renders the panel.
+  function seek(t) {
+    if (!events.length) return;
+    t = Math.max(0, t);
+    if (audio && !audio.hidden) {
+      audio.currentTime = t;
+      if (audio.paused) audio.play().catch(() => {});
+    } else {
+      wallStart = performance.now() - t * 1000;
+      rerender(t);
+    }
   }
 
   async function play(m) {
@@ -94,6 +194,11 @@
     if (m.has_audio) {
       audio.src = `/api/replays/${encodeURIComponent(m.id)}/audio`;
       audio.hidden = false;
+      if (ctx) {
+        ctx.resume().catch(() => {});
+        window.samjhoField?.attach(an);
+      }
+      loadEnvelope(audio.src, ++loadId);
       // Browsers may block autoplay; then the person presses play on the controls and the panel follows.
       audio.play().catch(() => {});
     } else {
@@ -104,6 +209,7 @@
 
   async function open() {
     ui();
+    graph(); // inside the tile's click, so the recording may play
     const res = await fetch("/api/replays");
     list = res.ok ? await res.json() : [];
     if (!list.length) {
@@ -135,5 +241,22 @@
     true,
   );
 
-  window.samjhoReplay = { open, stop };
+  window.samjhoReplay = {
+    open,
+    stop,
+    seek,
+    speaker,
+    envelope,
+    // The replay clock in seconds while one is loaded, else null.
+    time: () => (events.length ? now() : null),
+    // When she was speaking: before each of her recognised answers, by its length (the mix has no labels).
+    herWindows: () =>
+      events
+        .filter((e) => e.type === "heard")
+        .map((e) => {
+          const words = String(e.text || "").trim().split(/\s+/).filter(Boolean).length;
+          return [Math.max(0, e.t - (0.8 + words * 0.42)), e.t - 0.2];
+        }),
+    playing: () => Boolean(events.length && (audio.hidden || !audio.paused)),
+  };
 })();

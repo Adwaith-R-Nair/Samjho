@@ -326,6 +326,16 @@ typed session: the wrong teach-back formed Rs 50,000 in red and "har mahine" fro
 match. Also fixed from review: animated headings keep their accessible name, and the "keys not set" note appears only
 when a key is actually missing.
 
+### Commit 20: a new face, phase 3: her real voice moves the print
+Two AnalyserNodes now live in the browser voice's existing AudioContext: one gets a second connection from every buffer
+of Samjho's speech (the gapless queue, `clearPlayback` and the echo gate are untouched), the other taps the mic before
+the worklet through a gate that closes whenever the mic is muted. Both end in a zero-gain sink, so nothing extra is
+heard. The print, the voice-note waveforms (`web/js/voicenotes.js`) and the grain energy of the number effect follow the
+real audio. Replays route their recording through the same analysers, and tapping a voice note seeks the replay there.
+Phone mode drives the print from the call's events. Measured on a real browser-voice session with a fake microphone:
+Samjho's level peaked at 0.69 to 0.81 while he spoke; reply time median 1.06 s and 1.09 s against 1.05 s before the
+change, so the visuals cost the voice nothing measurable. Not yet tried: a real person's microphone through this build.
+
 ### In progress
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).

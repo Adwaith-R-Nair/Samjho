@@ -1873,3 +1873,13 @@ html:not(.js-story) #spotLanding {
   padding: 6px 8px;
   border-radius: 6px;
 }
+
+/* Her note while she is still speaking, before her words are recognised. */
+.note.pending .note-text {
+  color: var(--ink-3);
+  font-style: italic;
+}
+/* A waveform in a live session is a level meter, not a control; in a replay it seeks. */
+.note:not(:has(.note-play)) .note-wave {
+  cursor: default;
+}

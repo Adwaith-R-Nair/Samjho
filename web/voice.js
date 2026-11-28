@@ -2,6 +2,10 @@
 // 16 kHz audio (played gaplessly) and JSON UI events (passed to window.samjhoHandleEvent).
 // Half duplex: while Samjho's voice is playing, and for a short tail after, the mic sends silence, so laptop
 // speakers do not feed her own voice back as the borrower's answer.
+// Visuals: two AnalyserNodes in this same AudioContext. Each played buffer also feeds Samjho's analyser (a
+// second connection from the same source, so the gapless queue and its timing are untouched); the mic source
+// also feeds hers through a gate that is shut whenever the mic is sending silence. Both analysers end in a
+// zero-gain sink, so nothing extra is audible. They drive the print (window.samjhoField) and the voice notes.
 (() => {
   const RATE = 16000;
   const TAIL = 0.3; // seconds of mic silence after playback ends (room echo, output latency)
@@ -17,6 +21,24 @@
   let refused = false;
   let statusEl = null;
   let lastStatus = "";
+  let an = null; // { samjho, her } AnalyserNodes
+  let herGate = null; // GainNode: mic -> her analyser, open only while the mic is open
+
+  function analysers(c) {
+    const sink = c.createGain();
+    sink.gain.value = 0;
+    sink.connect(c.destination);
+    const make = () => {
+      const a = c.createAnalyser();
+      a.fftSize = 1024;
+      a.smoothingTimeConstant = 0.5;
+      a.minDecibels = -96;
+      a.maxDecibels = -22;
+      a.connect(sink);
+      return a;
+    };
+    return { samjho: make(), her: make() };
+  }
 
   // The session view's status row: who is speaking and the mic state (#status), the recording note
   // (#recNote) and the End button (#voiceEnd).
@@ -55,9 +77,11 @@
     const src = ctx.createBufferSource();
     src.buffer = audio;
     src.connect(ctx.destination);
+    if (an) src.connect(an.samjho);
     const now = ctx.currentTime;
     if (playHead < now) playHead = now + CUSHION;
     src.start(playHead);
+    window.samjhoNotes?.audio(playHead, playHead + audio.duration);
     playHead += audio.duration;
     sources.push(src);
     src.onended = () => {
@@ -100,6 +124,8 @@
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const speaking = botAudible();
     ws.send(speaking ? new ArrayBuffer(e.data.byteLength) : e.data);
+    // Her analyser hears exactly what the server hears: nothing while Samjho is audible.
+    if (herGate) herGate.gain.setTargetAtTime(speaking ? 0 : 1, ctx.currentTime, 0.01);
     if (!finished) status(speaking ? "Samjho is speaking. Your mic is paused." : "Listening. Speak now.");
   }
 
@@ -129,6 +155,12 @@
     const mute = ctx.createGain();
     mute.gain.value = 0;
     micNode.connect(mute).connect(ctx.destination);
+    // The visuals' tap: the same source, before the worklet, into her analyser through the half-duplex gate.
+    an = analysers(ctx);
+    herGate = ctx.createGain();
+    herGate.gain.value = 0;
+    source.connect(herGate).connect(an.her);
+    window.samjhoField?.attach(an);
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(`${proto}://${location.host}/ws/browser?lang=${encodeURIComponent(lang)}&record=${record ? 1 : 0}`);
@@ -162,6 +194,15 @@
     ctx = null;
     sources = [];
     playHead = 0;
+    // The print keeps reading Samjho's analyser while the goodbye plays out, then falls back to idle.
+    const a = an;
+    setTimeout(() => {
+      if (an === a) {
+        if (a && window.samjhoField?.analysers.samjho === a.samjho) window.samjhoField.attach(null);
+        an = null;
+      }
+    }, wait);
+    herGate = null;
   }
 
   function stop(message) {
@@ -176,5 +217,13 @@
     if (message) status(message, false);
   }
 
-  window.samjhoVoice = { start, stop, active: () => ws !== null };
+  window.samjhoVoice = {
+    start,
+    stop,
+    active: () => ws !== null,
+    // For the voice notes: the analysers, the audio clock, and whether her mic is open (not gated).
+    analysers: () => an,
+    now: () => (ctx ? ctx.currentTime : null),
+    micOpen: () => Boolean(ws && ws.readyState === WebSocket.OPEN && !botAudible() && !finished),
+  };
 })();
