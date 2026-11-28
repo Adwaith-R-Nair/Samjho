@@ -15,7 +15,7 @@ Module by module, as committed. Anything not built is marked **Planned** with it
 | `app/hi_numbers.py` | Number, schedule, count and duration parser | Built |
 | `app/loan.py` | `Loan`, `SAMPLE_LOAN`, `FACTS`, `TOLERANCE`, `truth()` | Built |
 | `app/lines.py`, `app/numwords.py` | Every spoken line in Hindi and English; amounts as Hindi words | Built |
-| `app/record.py` | `Ledger`, `verify()` | Built |
+| `app/record.py` | `Ledger`, `verify()`, `verify_record()` | Built |
 | `app/voice.py`, `app/browser_serializer.py` | Pipecat pipeline with browser and phone profiles; browser wire format | Built (phone proven on two real calls) |
 | `app/phone.py`, `app/limits.py` | Call desk, watch hub, one-time tokens; call limits | Built (proven on two real calls) |
 | `app/recording.py` | `Recorder`, `mask_numbers()`, `list_replays()`, `has_replays()`, `replay_file()`, `read_events()` | Built |
@@ -267,7 +267,10 @@ Whole amounts are logged as integers, so a copy re-written by the browser's down
 `right_after_samjho` counts facts green at the end. `extra_money_reported` is `null` if the private question was
 never reached. `consent` is `given`, `declined`, `not_started` or `null`.
 
-The seal covers `entries` only; the summary fields are a convenience view to be checked against the entries.
+At the end the session appends a `summary` entry (every summary field: facts, both scores, extra money, questions,
+consent) before `session_end`, so the score is inside the chain. `verify_record(record)` checks the chain and then that
+the summary on top of the record equals that sealed copy; `scripts/verify_record.py` uses it. Changing the score on top
+prints TAMPERED; changing the sealed copy breaks the chain.
 
 ### How to verify
 ```

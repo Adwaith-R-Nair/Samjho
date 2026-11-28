@@ -40,3 +40,21 @@ def verify(entries: list[dict], seal: str) -> bool:
     for entry in entries:
         h = _link(h, entry)
     return h == seal
+
+
+def verify_record(record: dict) -> bool:
+    """The chain is intact AND every summary field (her score, each fact, her consent) equals the sealed summary.
+
+    The summary at the top of a record is for people to read; its sealed copy is the last "summary" entry in
+    the log. Changing "right_first_answer" from 2 to 5 at the top no longer matches the sealed copy; changing the
+    sealed copy breaks the chain.
+    """
+    entries, seal = record.get("entries") or [], record.get("seal_sha256", "")
+    if not verify(entries, seal):
+        return False
+    sealed = next((e for e in reversed(entries) if e.get("kind") == "summary"), None)
+    if sealed is None:
+        return False
+    fields = {k: v for k, v in sealed.items() if k not in ("seq", "t", "kind")}
+    shown = {k: v for k, v in record.items() if k not in ("entries", "seal_sha256")}
+    return _canon(fields) == _canon(shown)

@@ -328,3 +328,58 @@ def test_how_much_to_deposit_gets_the_fixed_instalment_answer():
 
     line, source = answer("हफ्ते। 52 हफ्तों तक कितने रुपये जमा करना है?", SAMPLE_LOAN)
     assert source == "fixed" and "1,095" in line["en"]
+
+
+# ---- the seal covers the score, not only the log (found by running the video scripts) ---------
+def _sealed_record():
+    s = Session()
+    to_teachback(s)
+    s.hear("पचास हज़ार हाथ में आएँगे, हर महीने एक हज़ार पचानवे भरने हैं, कुल छप्पन हज़ार नौ सौ चालीस लौटाने हैं।")
+    for answer in ("एक हज़ार", "पंद्रह सौ नब्बे", "अड़तालीस हज़ार चार सौ दस", "हर हफ्ते", "हर हफ्ते", "नहीं", "हाँ, मैं समझ गई और सहमत हूँ"):
+        if s.state == "done":
+            break
+        ev = s.hear(answer)
+    return next(e["record"] for e in ev if e["type"] == "record")
+
+
+def test_an_untouched_record_verifies_after_a_json_round_trip():
+    import json
+
+    from app.record import verify_record
+
+    rec = json.loads(json.dumps(_sealed_record(), ensure_ascii=False))
+    assert verify_record(rec)
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda r: r.__setitem__("right_first_answer", 5),
+        lambda r: r["facts"]["cash_in_hand"].__setitem__("said", 48411),
+        lambda r: r.__setitem__("consent", "declined"),
+        lambda r: r.__setitem__("extra_money_reported", True),
+    ],
+)
+def test_changing_the_score_or_a_fact_on_top_breaks_the_seal(edit):
+    from app.record import verify_record
+
+    rec = copy.deepcopy(_sealed_record())
+    edit(rec)
+    assert not verify_record(rec)
+
+
+def test_a_record_without_a_sealed_summary_does_not_verify():
+    from app.record import verify_record
+
+    rec = _sealed_record()
+    rec["entries"] = [e for e in rec["entries"] if e["kind"] != "summary"]
+    assert not verify_record(rec)
+
+
+@pytest.mark.parametrize("text", ["ना", "ना।", "ना जी, किसी ने नहीं माँगा"])
+def test_na_on_its_own_is_no(text):
+    assert yes_no(text) is False
+
+
+def test_na_inside_a_word_is_not_no():
+    assert yes_no("नाम बताइए") is None

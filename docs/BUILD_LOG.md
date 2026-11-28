@@ -276,6 +276,21 @@ What broke, and the fix for each (tests use the exact transcripts):
 
 Across both calls: median 1.34 s over 22 turns (about 1.05 s after yes or no, about 1.35 s after a number).
 
+### Commit 15: the seal now covers her score, and "ना" means no
+Found while writing the demo video: a judge-style review ran every draft script's borrower lines through the real
+`Session` and every planned tamper through `scripts/verify_record.py`.
+1. The seal covered only the log entries. The summary on top of a record (her first-answer score, the score after
+   Samjho, each fact, consent) was not checked, so changing "right_first_answer" from 2 to 5 still printed VALID. For a
+   product whose claim is a tamper-evident record, that was the most serious gap found so far. The session now appends a
+   `summary` entry to the chain before it ends, and `record.verify_record()` checks the chain and that the summary on
+   top equals the sealed copy. Changing the score, a fact, the extra-money answer or the consent now prints TAMPERED.
+2. "ना" (and "ना।") was not read as no: `\b` does not work after a Devanagari vowel sign. In the review run a
+   private-question "ना" got "Sorry, I did not catch that". It is now matched as a word of its own, with the danda
+   counted as punctuation; "नाम" is still not a no.
+Also learned: the teach-back prompt does not ask about deductions, so a correct answer to the follow-up question counts
+as right first time. A script that wants "2 of 5" on the card must answer that question wrong first. Writing a heredoc
+edit turned `\b` into a backspace character again; the hygiene test caught it and the lines were rewritten safely.
+
 ### In progress
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).

@@ -1,7 +1,8 @@
 """Check a downloaded Samjho record against its seal.
 
 Usage: python scripts/verify_record.py samjho-record-<id>.json
-Prints VALID if every log entry is intact and in order, else TAMPERED.
+Prints VALID if every log entry is intact and in order and the summary on top (her score, each fact, her consent)
+matches the sealed copy in the log, else TAMPERED.
 """
 
 import json
@@ -10,12 +11,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.record import verify  # noqa: E402
+from app.record import verify_record  # noqa: E402
 
 
 def main() -> int:
     record = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    ok = verify(record["entries"], record["seal_sha256"])
+    ok = verify_record(record)
     print("VALID" if ok else "TAMPERED", record["seal_sha256"])
     return 0 if ok else 1
 

@@ -24,7 +24,14 @@ _YES = re.compile(
     r"\b(haan|haa|han|ha|hanji|haanji|ji|jee|yes|yeah|yep|ok|okay|theek|thik|bilkul|sahmat|shuru|chalo|sure)\b|हाँ|हां|जी|ठीक|सहमत|बिल्कुल",
     re.IGNORECASE,
 )
-_NO = re.compile(r"\b(nahi|nahin|nai|na|no|nope|mat|not)\b|नहीं|नही|ना\b", re.IGNORECASE)
+# "ना" as a word of its own: \b does not work after a Devanagari vowel sign, so look at the letters
+# around it. The danda (U+0964, U+0965) ends a sentence and does not count as a letter.
+_DEVA_LETTER = "[\u0900-\u0963\u0966-\u097F]"
+_NO = re.compile(
+    r"\b(nahi|nahin|nai|na|no|nope|mat|not)\b|नहीं|नही|"
+    + f"(?<!{_DEVA_LETTER})ना(?!{_DEVA_LETTER})",
+    re.IGNORECASE,
+)
 _QUESTION = re.compile(
     r"\?|\b(kyun|kyu|kyon|kaise|kitna|kitni|kitne|kab|kaun|kya|why|what|how|when|who)\b|क्यों|क्या|कैसे|कितना|कितने|कब|कौन",
     re.IGNORECASE,
@@ -236,11 +243,16 @@ class Session:
 
     def _finish(self) -> None:
         self._state("done")
+        # The summary goes into the chain too, so the score and the facts are sealed, not only the log.
+        self.ledger.append("summary", **self.summary())
         self.ledger.append("session_end")
         self._out.append({"type": "record", "record": self.record()})
 
     # ---- the sealed record -------------------------------------------------------------------
     def record(self) -> dict:
+        return {**self.summary(), "entries": self.ledger.entries, "seal_sha256": self.ledger.head}
+
+    def summary(self) -> dict:
         return {
             "session_id": self.id,
             "loan_id": self.loan.loan_id,
@@ -262,6 +274,4 @@ class Session:
             "extra_money_reported": self.extra_money_reported,
             "questions_for_lender": self.questions,
             "consent": self.consent,
-            "entries": self.ledger.entries,
-            "seal_sha256": self.ledger.head,
         }
