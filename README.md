@@ -27,8 +27,9 @@ Wispr Flow. Theme: Livelihoods and small business. The loan and the people are s
 | Sealed record | Every turn is hash-chained with SHA-256; the record shows each fact, her words, how often it was re-explained, right on her first answer vs after Samjho, and her consent. Anyone can re-verify a downloaded record with `python scripts/verify_record.py file.json` | `app/record.py`, `Session.record()` |
 | Runs anywhere | `docker compose up` with no keys shows the main screen; features that need a key say which key is not set | `app/config.py`, CI job `fresh-clone-boot` |
 
-Planned during Round 2 and not yet in this README's "works" list: replays of consented real test sessions and the
-hosted live link. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Live link: https://samjho-production.up.railway.app** (browser voice, typing and the sealed record; phone calls are switched off on the public link so
+nobody can ring numbers on the demo account). Planned and not yet in the "works" list: replays of consented real test
+sessions. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Numbers we measured
 
