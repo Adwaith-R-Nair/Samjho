@@ -10,7 +10,7 @@
 
   let box = null;
   let watch = null;
-  let recordNote = "";
+  let recordNote = false; // this call is being recorded for a demo replay
 
   // The access code arrives once in the shared link (?k=...) and is kept for this tab.
   const params = new URLSearchParams(location.search);
@@ -45,11 +45,10 @@
     p.classList.toggle("is-note", !isError);
   }
 
-  // Once the call is placed, its status follows in the session view (#callStatus).
-  function status(text) {
-    const p = document.getElementById("callStatus");
-    p.textContent = text;
-    p.hidden = !text;
+  // Once the call is placed, its status follows in the session view's status row (#status, #recNote).
+  function status(text, live) {
+    document.getElementById("status").textContent = text;
+    document.getElementById("recNote").hidden = !(recordNote && live);
   }
 
   async function call() {
@@ -70,11 +69,11 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || res.statusText);
+      window.samjhoShowSession("phone");
       window.samjhoReset();
       formNote("", false);
-      recordNote = record ? "Recording for a demo replay. " : "";
-      status(recordNote + "Placing the call...");
-      window.samjhoShowSession("phone");
+      recordNote = record;
+      status("Placing the call...", true);
       follow(data.watch_id);
     } finally {
       button.disabled = false;
@@ -90,7 +89,7 @@
       const ev = JSON.parse(msg.data);
       if (ev.type === "call") {
         const live = ev.status === "ringing" || ev.status === "connected";
-        status((live ? recordNote : "") + (STATUS[ev.status] || (() => ev.status))(ev));
+        status((STATUS[ev.status] || (() => ev.status))(ev), live);
         return;
       }
       window.samjhoHandleEvent(ev);

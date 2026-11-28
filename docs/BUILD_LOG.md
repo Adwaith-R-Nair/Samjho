@@ -314,6 +314,18 @@ then the real start options with their real reasons from /api/status. Smooth scr
 3.13.0 (ScrollTrigger, SplitText) and Lenis 1.3.11, pinned on jsDelivr. The session view keeps its old layout with
 the new colours until phase 2. A typed session still runs to a sealed record at 1440 px and 360 px.
 
+### Commit 19: a new face, phase 2: the live session inside the print
+The session view is rebuilt on the same events (`say`, `heard`, `fact`, `case`, `record`, `latency`, `state`). Turns are
+voice-note bubbles (Samjho left, her right) with the real reply time per turn. The five facts are five numbered rings of
+the fingerprint, each with a leader line to its row; a row keeps her first verdict beside the current one ("explained
+again 2x"). The other design's signature effect is in: when code marks an amount, the figure she said (her
+Rs 50,000, or her words "har mahine") assembles out of grains inside the print in red, amber or green, then flies into
+its ring and row (`web/js/livefx.js`, one 2D canvas that runs only while a figure is on screen; 2,600 grains on a laptop,
+1,100 on a phone; off under reduced motion). The seal closes with the real hash around the ring. Checked by hand with a
+typed session: the wrong teach-back formed Rs 50,000 in red and "har mahine" from her words, and the rings lit to
+match. Also fixed from review: animated headings keep their accessible name, and the "keys not set" note appears only
+when a key is actually missing.
+
 ### In progress
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).

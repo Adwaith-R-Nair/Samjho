@@ -17,7 +17,6 @@
 
   const S = { view: "landing", tweening: 0, redraw: { p: 0 }, introActive: false };
   const LIVE_UNWIND = 0.3; // in a session the print's outer ridges are already voice
-  const LIVE_INK = 0.5; // and it rests quieter behind the panels
 
   // ---------------------------------------------------------------- the field
   const field = new VoiceField($("field"), { reduced, fallbackSvg: $("fieldFallback") });
@@ -136,19 +135,23 @@
       field.u.ty = r.top + r.height / 2;
       cta.style.setProperty("--pulse", (field.level.samjho * 0.9 + field.u.converge * 0.15).toFixed(3));
     }
+    // The session's leader lines and seal ring follow the print (web/js/livefx.js).
+    window.samjhoFx?.frame(S.view);
   };
-  addEventListener("resize", () => {
+  // Without a render loop (reduced motion, SVG fallback) the frame and the overlay are redrawn on demand.
+  const refresh = () => {
     follow();
     field.still();
+    window.samjhoFx?.frame(S.view);
+  };
+  addEventListener("resize", () => {
+    refresh();
     drawNote();
   });
   addEventListener(
     "scroll",
     () => {
-      if (reduced || !field.ok) {
-        follow();
-        field.still();
-      }
+      if (reduced || !field.ok) refresh();
     },
     { passive: true },
   );
@@ -245,8 +248,20 @@
     const hasSplit = Boolean(window.SplitText);
     // Latin headlines split to characters inside line masks; Devanagari only to words, so conjuncts and
     // vowel signs are never torn apart.
-    const splits = hasSplit ? heads.map((h) => SplitText.create(h, { type: "lines,words,chars", mask: "lines", linesClass: "ln", wordsClass: "w", charsClass: "ch" })) : [];
-    const hiSplits = hasSplit ? his.map((h) => SplitText.create(h, { type: "lines,words", mask: "lines", linesClass: "ln", wordsClass: "w" })) : [];
+    // Screen readers get the whole line once: the split pieces are hidden from them and a visually hidden
+    // copy of the original text is read instead (a heading also keeps it as its accessible name).
+    const accessible = (h, split) => {
+      const text = h.textContent.replace(/\s+/g, " ").trim();
+      [...h.children].forEach((c) => c.setAttribute("aria-hidden", "true"));
+      const sr = document.createElement("span");
+      sr.className = "sr-only";
+      sr.textContent = text;
+      h.prepend(sr);
+      return split;
+    };
+    const splitOf = (h, vars) => accessible(h, SplitText.create(h, { ...vars, aria: "none", mask: "lines", linesClass: "ln", wordsClass: "w" }));
+    const splits = hasSplit ? heads.map((h) => splitOf(h, { type: "lines,words,chars", charsClass: "ch" })) : [];
+    const hiSplits = hasSplit ? his.map((h) => splitOf(h, { type: "lines,words" })) : [];
     const chars = (i) => (splits[i] ? splits[i].chars : []);
     const hiWords = (i) => (hiSplits[i] ? hiSplits[i].words : []);
     const rest = (b) => b.querySelectorAll(".beat-p, .beat-label, .beat-fact, .beat-note, .btn");
@@ -392,7 +407,9 @@
       scrollToY(0, true);
       field.u.draw = 999;
       const t = spotOf($("spotLive"), true);
-      to(field.u, { ...t, unwind: LIVE_UNWIND, dim: 0, rings: 0, intro: LIVE_INK, zoom: 1, tunnel: 0, depth: 0, converge: 0, travel: 0, wash: 0, duration: 1.4, ease: "expo.inOut" });
+      // The facts are its five rings now (web/js/livefx.js colours them); unless sealed, its outer ridges are voice.
+      const sealed = field.u.seal > 0.5;
+      to(field.u, { ...t, unwind: sealed ? 0 : LIVE_UNWIND, dim: 0, rings: 1, intro: 1, zoom: 1, tunnel: 0, depth: 0, converge: 0, travel: 0, wash: 0, duration: 1.4, ease: "expo.inOut" });
       return;
     }
     if (prev === "live" && storyST) {
@@ -407,7 +424,15 @@
       if (storyST) storyST.scroll(storyST.start);
     } else scrollToY(0, false);
   }
-  window.samjhoStage = { onView, field };
+  // Page scroll for the session view (through Lenis when it runs): a y in px or an element.
+  function pageTo(target, offset = 0) {
+    if (lenis) {
+      lenis.resize();
+      lenis.scrollTo(target, { offset, duration: 0.9, easing: easeOut, force: true });
+    } else if (typeof target === "number") scrollTo({ top: target + offset, behavior: reduced ? "auto" : "smooth" });
+    else target.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+  }
+  window.samjhoStage = { onView, field, refresh, reduced, view: () => S.view, pageTo };
 
   // ---------------------------------------------------------------- debug (?debug=1): an fps readout only
   if (new URLSearchParams(location.search).get("debug") === "1") {

@@ -18,23 +18,18 @@
   let statusEl = null;
   let lastStatus = "";
 
+  // The session view's status row: who is speaking and the mic state (#status), the recording note
+  // (#recNote) and the End button (#voiceEnd).
   function ui() {
     if (statusEl) return statusEl;
-    statusEl = document.createElement("div");
-    statusEl.className = "voice-status";
-    statusEl.style.margin = "10px 0 0";
-    statusEl.hidden = true;
-    statusEl.innerHTML =
-      '<strong class="voice-rec" hidden style="color: var(--red)">Recording for a demo replay. </strong>' +
-      '<span class="voice-text muted"></span> <button type="button" class="voice-end">End</button>';
-    statusEl.querySelector(".voice-end").onclick = () => stop("Session ended.");
-    // Shown in the session view, above the conversation.
-    const host = document.getElementById("sessionStatus");
-    if (host) host.appendChild(statusEl);
-    else {
-      const tiles = document.getElementById("tiles");
-      tiles.parentNode.insertBefore(statusEl, tiles.nextSibling);
-    }
+    statusEl = {
+      text: document.getElementById("status"),
+      rec: document.getElementById("recNote"),
+      end: document.getElementById("voiceEnd"),
+    };
+    statusEl.end.addEventListener("click", () => {
+      if (ws) stop("Session ended.");
+    });
     return statusEl;
   }
 
@@ -42,9 +37,8 @@
     if (text === lastStatus) return;
     lastStatus = text;
     const el = ui();
-    el.hidden = false;
-    el.querySelector(".voice-text").textContent = text;
-    el.querySelector(".voice-end").hidden = !live;
+    el.text.textContent = text;
+    el.end.hidden = !live;
   }
 
   function botAudible() {
@@ -110,7 +104,7 @@
   }
 
   function recording(on) {
-    ui().querySelector(".voice-rec").hidden = !on;
+    ui().rec.hidden = !on;
   }
 
   async function start(lang) {

@@ -26,6 +26,10 @@
   <canvas id="field" aria-hidden="true"></canvas>
   <!-- No-WebGL fallback: an authored SVG print. -->
   <svg id="fieldFallback" aria-hidden="true" hidden></svg>
+  <!-- On the print in a session: leader lines to the five fact rings, the seal hash ring (web/js/livefx.js). -->
+  <svg id="overlay" aria-hidden="true"></svg>
+  <!-- The number effect: her voice's grains assemble the figure she said (web/js/livefx.js). -->
+  <canvas id="grains" aria-hidden="true"></canvas>
 
   <!-- Intro: one drop of ink lands, the print inks in from it. Under 1.5 s, skippable. -->
   <div class="intro" id="intro" aria-hidden="true">
@@ -148,40 +152,53 @@
 
     <!-- ============ SESSION: every channel renders here through handleEvent() in web/app.js ============ -->
     <section class="live" id="live" aria-labelledby="liveTitle" data-only="live" hidden>
-      <div class="whorl-spot" id="spotLive" aria-hidden="true"></div>
       <div class="live-head">
-        <button type="button" class="btn btn-quiet back" id="newSession">New session</button>
         <div class="live-title">
+          <button type="button" class="btn btn-quiet back" id="newSession">New session</button>
           <h1 id="liveTitle" tabindex="-1">Session</h1>
-          <p class="loan-mini">Sample loan (synthetic): Rs 50,000 sanctioned, Rs 48,410 in hand, Rs 1,095 every week for 52 weeks, Rs 56,940 in total.</p>
         </div>
-        <!-- Browser voice status (web/voice.js) and the replay player (web/replay.js) mount here. -->
+        <div class="status-row">
+          <span class="pill is-live" id="pill"><span class="dot" aria-hidden="true"></span><span id="pillText">LIVE</span></span>
+          <span class="status" id="status" role="status"></span>
+          <span class="rec" id="recNote" hidden>Recording for a demo replay.</span>
+          <button type="button" class="btn btn-quiet end" id="voiceEnd" hidden>End</button>
+        </div>
+        <p class="stage"><span>Step</span> <b id="stageText">Starting</b> <span class="reply" id="replyTime"></span></p>
+        <p class="loan-mini">Sample loan (synthetic): Rs 50,000 sanctioned, Rs 48,410 in hand, Rs 1,095 every week for 52 weeks, Rs 56,940 in total.</p>
+        <!-- The replay player and its REPLAY badge (web/replay.js) mount here. -->
         <div class="session-status" id="sessionStatus"></div>
-        <p class="call-status" id="callStatus" role="status" hidden></p>
       </div>
-      <div class="grid">
-        <section class="card call" aria-label="Conversation">
-          <h2>Conversation</h2>
-          <p class="hint" id="hint" hidden>Tip: when asked to explain the loan back, try saying the wrong amount, like "pachaas hazaar haath mein aayenge", and watch Samjho catch it.</p>
-          <div class="transcript" id="transcript" aria-live="polite" data-lenis-prevent></div>
-          <form class="say" id="say" hidden>
-            <input id="sayText" autocomplete="off" placeholder="Type her answer, in Hindi, Hinglish or English" aria-label="Your answer">
-            <button type="submit">Send</button>
-          </form>
-        </section>
 
-        <section class="card panel" aria-label="What Samjho checked">
-          <h2>What she understood</h2>
-          <ul class="facts" id="facts">
-            <li class="fact" data-fact="cash_in_hand"><span class="label">Cash in hand</span><span class="truth">Rs 48,410</span><span class="said"></span></li>
-            <li class="fact" data-fact="deductions"><span class="label">Deductions</span><span class="truth">Rs 1,590</span><span class="said"></span></li>
-            <li class="fact" data-fact="instalment"><span class="label">Instalment</span><span class="truth">Rs 1,095</span><span class="said"></span></li>
-            <li class="fact" data-fact="frequency"><span class="label">How often</span><span class="truth">Every week, 52 weeks</span><span class="said"></span></li>
-            <li class="fact" data-fact="total"><span class="label">Total to repay</span><span class="truth">Rs 56,940</span><span class="said"></span></li>
-          </ul>
-          <div class="events" id="events"></div>
-          <div class="record" id="record" hidden></div>
-        </section>
+      <aside class="facts" aria-labelledby="factsTitle">
+        <h2 id="factsTitle">What she understood</h2>
+        <p class="facts-sub">Five rings of her print, numbered inner (1) to outer (5). Each lights when code checks what she said.</p>
+        <ol class="fact-list" id="facts">
+          <li class="fact grey" data-fact="cash_in_hand"><span class="sw" aria-hidden="true">1</span><span class="f-name">Cash in hand</span><span class="f-truth tnum">Rs 48,410</span><span class="f-first"></span><span class="f-now">Not said yet</span></li>
+          <li class="fact grey" data-fact="deductions"><span class="sw" aria-hidden="true">2</span><span class="f-name">Deductions</span><span class="f-truth tnum">Rs 1,590</span><span class="f-first"></span><span class="f-now">Not said yet</span></li>
+          <li class="fact grey" data-fact="instalment"><span class="sw" aria-hidden="true">3</span><span class="f-name">Instalment</span><span class="f-truth tnum">Rs 1,095</span><span class="f-first"></span><span class="f-now">Not said yet</span></li>
+          <li class="fact grey" data-fact="frequency"><span class="sw" aria-hidden="true">4</span><span class="f-name">How often</span><span class="f-truth">Every week, 52 weeks</span><span class="f-first"></span><span class="f-now">Not said yet</span></li>
+          <li class="fact grey" data-fact="total"><span class="sw" aria-hidden="true">5</span><span class="f-name">Total to repay</span><span class="f-truth tnum">Rs 56,940</span><span class="f-first"></span><span class="f-now">Not said yet</span></li>
+        </ol>
+        <p class="legend-key"><span class="k-first">Short arc: her first answer</span><span class="k-now">Ring: now</span></p>
+      </aside>
+
+      <div class="whorl-spot" id="spotLive" aria-hidden="true">
+        <div class="seal-center" id="sealCenter" hidden>
+          <span class="sc-l">Sealed</span>
+          <span class="sc-row"><b class="sc-n tnum sc-before" id="scBefore">0</b><span class="sc-s">of 5 on her<br>first answer</span></span>
+          <span class="sc-row"><b class="sc-n tnum sc-after" id="scAfter">0</b><span class="sc-s">of 5 after<br>Samjho</span></span>
+        </div>
+      </div>
+
+      <div class="convo" data-lenis-prevent>
+        <p class="hint" id="hint" hidden>Tip: when asked to explain the loan back, try saying the wrong amount, like "pachaas hazaar haath mein aayenge", and watch Samjho catch it.</p>
+        <ol class="notes" id="transcript" aria-live="polite" aria-label="Conversation"></ol>
+        <form class="say" id="say" hidden>
+          <input id="sayText" autocomplete="off" placeholder="Type her answer, in Hindi, Hinglish or English" aria-label="Your answer">
+          <button type="submit" class="btn btn-quiet">Send</button>
+        </form>
+        <div class="events" id="events"></div>
+        <section class="record" id="record" hidden aria-labelledby="recTitle"></section>
       </div>
     </section>
   </main>
@@ -197,6 +214,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.11/dist/lenis.min.js"></script>
   <script src="/static/js/voicefield.js"></script>
   <script src="/static/js/landing.js"></script>
+  <script src="/static/js/livefx.js"></script>
   <script src="/static/voice.js"></script>
   <script src="/static/phone.js"></script>
   <script src="/static/replay.js"></script>
