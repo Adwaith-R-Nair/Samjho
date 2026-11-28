@@ -27,39 +27,33 @@
     }
   }
 
+  // The form is in the page (#phoneForm, start options); its errors show under it (#phoneErr).
   function form() {
     if (box) return box;
-    box = document.createElement("div");
-    box.className = "phone-box";
-    box.style.margin = "12px 0 0";
-    box.innerHTML = `
-      <form class="say phone-form" style="flex-wrap: wrap">
-        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" value="+91" aria-label="Indian mobile number"
-               placeholder="+91 98765 43210" required>
-        <button type="submit">Call me</button>
-        <label class="muted" style="flex-basis: 100%; margin: 4px 0 0">
-          <input name="consent" type="checkbox">
-          I agree to receive one demo call from a +1 (US) number; it shows as an International Call.
-        </label>
-      </form>
-      <p class="phone-status muted" hidden></p>`;
-    box.querySelector("form").addEventListener("submit", (e) => {
+    box = document.getElementById("phoneForm");
+    box.addEventListener("submit", (e) => {
       e.preventDefault();
-      call().catch((err) => status(err.message));
+      call().catch((err) => formNote(err.message, true));
     });
-    const tiles = document.getElementById("tiles");
-    tiles.parentNode.insertBefore(box, tiles.nextSibling);
     return box;
   }
 
+  function formNote(text, isError) {
+    const p = document.getElementById("phoneErr");
+    p.textContent = text;
+    p.hidden = !text;
+    p.classList.toggle("is-note", !isError);
+  }
+
+  // Once the call is placed, its status follows in the session view (#callStatus).
   function status(text) {
-    const p = form().querySelector(".phone-status");
+    const p = document.getElementById("callStatus");
     p.textContent = text;
     p.hidden = !text;
   }
 
   async function call() {
-    const f = form().querySelector("form");
+    const f = form();
     const phone = f.phone.value.replace(/[\s-]/g, "");
     if (!/^\+91[6-9]\d{9}$/.test(phone)) throw new Error("Enter an Indian mobile number as +91 followed by 10 digits.");
     if (!f.consent.checked) throw new Error("Please tick the box to agree to receive the demo call.");
@@ -67,7 +61,7 @@
     const record = Boolean(document.getElementById("recordConsent")?.checked);
     const button = f.querySelector("button");
     button.disabled = true;
-    status("Placing the call...");
+    formNote("Placing the call...", false);
     try {
       const res = await fetch("/api/call", {
         method: "POST",
@@ -77,7 +71,10 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || res.statusText);
       window.samjhoReset();
+      formNote("", false);
       recordNote = record ? "Recording for a demo replay. " : "";
+      status(recordNote + "Placing the call...");
+      window.samjhoShowSession("phone");
       follow(data.watch_id);
     } finally {
       button.disabled = false;
@@ -107,6 +104,7 @@
     form().hidden = false;
     form().querySelector("input[name=phone]").focus();
   }
+  form();
 
   window.samjhoPhone = { open };
 })();

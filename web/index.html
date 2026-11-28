@@ -2,80 +2,201 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Samjho: her voice, not her thumb</title>
+  <meta name="description" content="Samjho explains a microfinance loan by voice in Hindi, hears it back in her own words, checks five facts in code and seals her spoken consent.">
+  <meta name="theme-color" content="#0D0B16">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%230D0B16%22/%3E%3Cg fill=%22none%22 stroke=%22%238E7CFF%22 stroke-width=%222%22%3E%3Cellipse cx=%2216%22 cy=%2216%22 rx=%2210%22 ry=%2212%22/%3E%3Cellipse cx=%2216%22 cy=%2216%22 rx=%225.5%22 ry=%227%22/%3E%3C/g%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%222%22 fill=%22%235DE2E7%22/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500..900;1,6..96,500..900&family=Rozha+One&family=Mukta:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body data-view="landing">
+  <script>
+    // Before first paint: the intro runs only with JS, without reduced motion, and not for a deep link.
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches && location.hash !== "#start") document.documentElement.classList.add("intro-on");
+    // Skipping works even while the scripts are still loading.
+    document.addEventListener("click", (e) => {
+      if (e.target && e.target.id === "introSkip") document.documentElement.classList.remove("intro-on");
+    });
+  </script>
+
+  <!-- The one main canvas: the living thumbprint, fixed behind everything (web/js/voicefield.js). -->
+  <canvas id="field" aria-hidden="true"></canvas>
+  <!-- No-WebGL fallback: an authored SVG print. -->
+  <svg id="fieldFallback" aria-hidden="true" hidden></svg>
+
+  <!-- Intro: one drop of ink lands, the print inks in from it. Under 1.5 s, skippable. -->
+  <div class="intro" id="intro" aria-hidden="true">
+    <span class="drop" id="drop"></span>
+    <span class="splash" id="splash"></span>
+    <button type="button" class="intro-skip" id="introSkip" tabindex="-1">Skip intro</button>
+  </div>
+
+  <a class="skip" href="#start" data-only="landing">Skip to the start options</a>
+
   <header class="top">
-    <div class="brand">
-      <span class="logo">समझो</span>
-      <span class="name">Samjho</span>
-    </div>
-    <p class="tag">Her voice, not her thumb. Before a borrower acknowledges her loan, she says it back in her own words and every number is checked in code.</p>
+    <a class="mark" href="#top" data-go="landing" aria-label="Samjho, back to the start">
+      <span class="dev" lang="hi">समझो</span><span class="lat">Samjho</span>
+    </a>
+    <p class="top-note" id="topNote">Sample loan (synthetic). Synthetic people only.</p>
+    <a class="top-cta" href="#start" data-only="landing">Start<span class="cta-long"> a session</span></a>
   </header>
 
-  <main class="grid">
-    <section class="card call" aria-label="Conversation">
-      <h2>Start a session</h2>
-      <p class="muted">Sample loan (synthetic): Rs 50,000 sanctioned, Rs 1,590 deducted, Rs 48,410 in hand, Rs 1,095 every week for 52 weeks, Rs 56,940 in total.</p>
-      <div class="tiles" id="tiles">
-        <button class="tile" data-mode="browser" disabled>
-          <strong>Talk in the browser</strong>
-          <span>Hindi or English, with your microphone</span>
-          <em class="state" data-for="voice"></em>
-        </button>
-        <button class="tile" data-mode="phone" disabled>
-          <strong>Get a real phone call</strong>
-          <span>Indian mobile numbers only</span>
-          <em class="state" data-for="phone"></em>
-        </button>
-        <button class="tile" data-mode="text" disabled>
-          <strong>Type instead</strong>
-          <span>Same checks, no microphone</span>
-          <em class="state" data-for="text"></em>
-        </button>
-        <button class="tile" data-mode="replay" disabled>
-          <strong>Replay a real test session</strong>
-          <span>Recorded with the tester's consent</span>
-          <em class="state" data-for="replay"></em>
-        </button>
+  <main id="top">
+    <!-- ============ LANDING: the scroll story, four chambers of the print ============ -->
+    <section class="story" id="story" aria-label="Why Samjho exists" data-only="landing">
+      <div class="story-scrim" aria-hidden="true"></div>
+      <div class="story-copy">
+        <article class="beat" data-beat="1">
+          <h1 class="beat-h" data-split>Today, her consent is a <em>thumbprint.</em></h1>
+          <p class="beat-hi" lang="hi" data-split-hi>आज उसकी सहमति, एक अँगूठे का निशान।</p>
+          <p class="beat-p">Pressed onto a Key Fact Statement she may not be able to read. <span class="beat-what">Samjho explains the loan by voice, hears it back in her own words, checks five facts in code and seals her spoken consent.</span></p>
+          <p class="beat-label">Sample loan (synthetic). Synthetic people only.</p>
+        </article>
+        <article class="beat" data-beat="2">
+          <h2 class="beat-h" data-split><em>Pseudo</em> consent.</h2>
+          <p class="beat-hi" lang="hi" data-split-hi>नाम भर की सहमति।</p>
+          <p class="beat-p">The ink proves she was in the room. It cannot prove she knows that <b class="tnum" data-count="1590">Rs 1,590</b> is cut before the money reaches her hand.</p>
+          <p class="beat-fact"><span>She believes</span> <b class="tnum old">Rs 50,000<i class="strike" aria-hidden="true"></i></b> <span>reaches her hand.</span> <b class="tnum new" id="numHand">Rs 48,410</b> <span>does.</span></p>
+        </article>
+        <article class="beat" data-beat="3">
+          <h2 class="beat-h" data-split>So she says it back, in her <em>own words.</em></h2>
+          <p class="beat-hi" lang="hi" data-split-hi>तो वह अपने शब्दों में दोहराती है।</p>
+          <figure class="beat-note her">
+            <div class="note-row">
+              <button type="button" class="note-play" id="herNotePlay" aria-label="Play her answer, an AI stand-in voice" aria-pressed="false">
+                <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.8v10.4L12 7z"/></svg>
+              </button>
+              <div class="mini-wave" aria-hidden="true"><canvas class="bar-wave" id="herNoteWave" width="240" height="36" data-env="0,0.47,1,0.33,0.85,0.71,0.84,0.23,0.7,0.43,0.39,0.11,0,0.18,0.88,0.7,0.78,0.9,0.49,0.54,0.89,0.37,0.74,0.47,0.43,0.39,0.56,0.34,0.06,0,0.38,0.46,0.52,0.63,0.64,0.98,0.51,0.73,0.57,0.82,0.54,0.37,0.62,0.75,0.46,0.33,0.08,0"></canvas></div>
+              <span class="note-dur" id="herNoteDur">0:07</span>
+            </div>
+            <blockquote lang="hi">पचास हज़ार हाथ में आएँगे, हर महीने एक हज़ार पचानवे भरने हैं...</blockquote>
+            <figcaption>"Fifty thousand reaches my hand, I pay 1,095 every month..." Code catches both mistakes.</figcaption>
+            <p class="note-label">AI stand-in voice (Sarvam text-to-speech), not a real borrower.</p>
+            <audio id="herNoteAudio" src="/static/audio/her-teachback.m4a" preload="none"></audio>
+          </figure>
+          <p class="beat-p">Code checks five facts in what she said. Samjho explains again only what she got wrong, until she has it.</p>
+        </article>
+        <article class="beat" data-beat="4">
+          <h2 class="beat-h beat-h-xl" data-split>Her voice, <em>not her thumb.</em></h2>
+          <p class="beat-hi" lang="hi" data-split-hi>अँगूठा नहीं, उसकी आवाज़।</p>
+          <p class="beat-p">Her spoken consent is sealed with a before and after score: right on her first answer, right after Samjho.</p>
+          <a class="btn btn-voice btn-breathe" id="storyCta" href="#start">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            Talk to Samjho
+          </a>
+        </article>
       </div>
-      <div class="langs" role="radiogroup" aria-label="Language">
-        <span class="muted">Language:</span>
-        <label><input type="radio" name="lang" value="hi" checked> हिंदी</label>
-        <label><input type="radio" name="lang" value="en"> English</label>
-      </div>
-      <label class="langs record-consent">
-        <input type="checkbox" id="recordConsent">
-        <span>Save this session as a demo replay. The person speaking agrees to be recorded and shown.</span>
-      </label>
-      <p class="hint muted" id="hint" hidden>Tip: when asked to explain the loan back, try saying the wrong amount, like "pachaas hazaar haath mein aayenge", and watch Samjho catch it.</p>
-      <div class="transcript" id="transcript" aria-live="polite"></div>
-      <form class="say" id="say" hidden>
-        <input id="sayText" autocomplete="off" placeholder="Type her answer, in Hindi, Hinglish or English" aria-label="Your answer">
-        <button type="submit">Send</button>
-      </form>
+      <div class="whorl-spot" id="spotLanding" aria-hidden="true"></div>
+      <a class="scroll-cue" id="scrollCue" href="#start"><span class="cue-line" aria-hidden="true"></span>Scroll into the print, or skip to Talk</a>
     </section>
 
-    <section class="card panel" aria-label="What Samjho checked">
-      <h2>What she understood</h2>
-      <ul class="facts" id="facts">
-        <li class="fact" data-fact="cash_in_hand"><span class="label">Cash in hand</span><span class="truth">Rs 48,410</span><span class="said"></span></li>
-        <li class="fact" data-fact="deductions"><span class="label">Deductions</span><span class="truth">Rs 1,590</span><span class="said"></span></li>
-        <li class="fact" data-fact="instalment"><span class="label">Instalment</span><span class="truth">Rs 1,095</span><span class="said"></span></li>
-        <li class="fact" data-fact="frequency"><span class="label">How often</span><span class="truth">Every week, 52 weeks</span><span class="said"></span></li>
-        <li class="fact" data-fact="total"><span class="label">Total to repay</span><span class="truth">Rs 56,940</span><span class="said"></span></li>
-      </ul>
-      <div class="events" id="events"></div>
-      <div class="record" id="record" hidden></div>
+    <!-- ============ LANDING: the four real start options ============ -->
+    <section class="start" id="start" aria-labelledby="startTitle" data-only="landing">
+      <div class="start-inner">
+        <h2 id="startTitle" tabindex="-1" data-split>Talk to Samjho</h2>
+        <p class="start-hi" lang="hi">समझो से बात कीजिए</p>
+        <p class="loan">Sample loan (synthetic): <b class="tnum">Rs 50,000</b> sanctioned, <b class="tnum">Rs 1,590</b> deducted, <b class="tnum">Rs 48,410</b> in hand, <b class="tnum">Rs 1,095</b> every week for 52 weeks, <b class="tnum">Rs 56,940</b> in total.</p>
+
+        <div class="options" id="tiles">
+          <button type="button" class="opt tile" data-mode="browser" disabled>
+            <span class="opt-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+            <span class="opt-t"><strong>Talk in the browser</strong><span>Hindi or English, with your microphone</span></span>
+            <em class="state" data-for="voice"></em>
+          </button>
+          <button type="button" class="opt tile" data-mode="phone" disabled>
+            <span class="opt-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h3l2 5-2.5 1.5a11 11 0 0 0 6 6L15 14l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"/></svg></span>
+            <span class="opt-t"><strong>Get a real phone call</strong><span>Indian mobile numbers only</span></span>
+            <em class="state" data-for="phone"></em>
+          </button>
+          <button type="button" class="opt tile" data-mode="text" disabled>
+            <span class="opt-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h1M11 10h1M15 10h1M7 14h10"/></svg></span>
+            <span class="opt-t"><strong>Type instead</strong><span>Same checks, no microphone</span></span>
+            <em class="state" data-for="text"></em>
+          </button>
+          <button type="button" class="opt tile" data-mode="replay" disabled>
+            <span class="opt-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="m10 9 5 3-5 3Z"/></svg></span>
+            <span class="opt-t"><strong>Replay a real test session</strong><span>Recorded with the tester's consent</span></span>
+            <em class="state" data-for="replay"></em>
+          </button>
+        </div>
+
+        <!-- Real phone call (web/phone.js): validated here, placed by POST /api/call. -->
+        <form class="phone-form" id="phoneForm" hidden novalidate>
+          <label class="field-l" for="phoneNum">Indian mobile number</label>
+          <div class="phone-row">
+            <input id="phoneNum" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="+91" placeholder="+91 98765 43210" required>
+            <button type="submit" class="btn btn-voice">Call me</button>
+          </div>
+          <label class="check"><input name="consent" type="checkbox"> <span>I agree to receive one demo call from a +1 (US) number; it shows as an International Call.</span></label>
+          <p class="form-err" id="phoneErr" role="alert" hidden></p>
+        </form>
+
+        <div class="settings">
+          <div class="langs" role="radiogroup" aria-label="Language">
+            <span class="langs-l">Language</span>
+            <label class="radio"><input type="radio" name="lang" value="hi" checked> <span lang="hi">हिंदी</span></label>
+            <label class="radio"><input type="radio" name="lang" value="en"> <span>English</span></label>
+          </div>
+          <label class="check"><input type="checkbox" id="recordConsent"> <span>Save this session as a demo replay. The person speaking agrees to be recorded and shown.</span></label>
+          <p class="keys" id="keys" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SESSION: every channel renders here through handleEvent() in web/app.js ============ -->
+    <section class="live" id="live" aria-labelledby="liveTitle" data-only="live" hidden>
+      <div class="whorl-spot" id="spotLive" aria-hidden="true"></div>
+      <div class="live-head">
+        <button type="button" class="btn btn-quiet back" id="newSession">New session</button>
+        <div class="live-title">
+          <h1 id="liveTitle" tabindex="-1">Session</h1>
+          <p class="loan-mini">Sample loan (synthetic): Rs 50,000 sanctioned, Rs 48,410 in hand, Rs 1,095 every week for 52 weeks, Rs 56,940 in total.</p>
+        </div>
+        <!-- Browser voice status (web/voice.js) and the replay player (web/replay.js) mount here. -->
+        <div class="session-status" id="sessionStatus"></div>
+        <p class="call-status" id="callStatus" role="status" hidden></p>
+      </div>
+      <div class="grid">
+        <section class="card call" aria-label="Conversation">
+          <h2>Conversation</h2>
+          <p class="hint" id="hint" hidden>Tip: when asked to explain the loan back, try saying the wrong amount, like "pachaas hazaar haath mein aayenge", and watch Samjho catch it.</p>
+          <div class="transcript" id="transcript" aria-live="polite" data-lenis-prevent></div>
+          <form class="say" id="say" hidden>
+            <input id="sayText" autocomplete="off" placeholder="Type her answer, in Hindi, Hinglish or English" aria-label="Your answer">
+            <button type="submit">Send</button>
+          </form>
+        </section>
+
+        <section class="card panel" aria-label="What Samjho checked">
+          <h2>What she understood</h2>
+          <ul class="facts" id="facts">
+            <li class="fact" data-fact="cash_in_hand"><span class="label">Cash in hand</span><span class="truth">Rs 48,410</span><span class="said"></span></li>
+            <li class="fact" data-fact="deductions"><span class="label">Deductions</span><span class="truth">Rs 1,590</span><span class="said"></span></li>
+            <li class="fact" data-fact="instalment"><span class="label">Instalment</span><span class="truth">Rs 1,095</span><span class="said"></span></li>
+            <li class="fact" data-fact="frequency"><span class="label">How often</span><span class="truth">Every week, 52 weeks</span><span class="said"></span></li>
+            <li class="fact" data-fact="total"><span class="label">Total to repay</span><span class="truth">Rs 56,940</span><span class="said"></span></li>
+          </ul>
+          <div class="events" id="events"></div>
+          <div class="record" id="record" hidden></div>
+        </section>
+      </div>
     </section>
   </main>
 
-  <footer class="foot">
-    <span id="keys"></span>
-    <span>Synthetic loan and people only. Built by voice with Wispr Flow.</span>
+  <footer class="foot" data-only="landing">
+    <span>Synthetic loan and people only. Typing always works, with or without keys.</span>
+    <span>Built by voice with Wispr Flow.</span>
   </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/SplitText.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.11/dist/lenis.min.js"></script>
+  <script src="/static/js/voicefield.js"></script>
+  <script src="/static/js/landing.js"></script>
   <script src="/static/voice.js"></script>
   <script src="/static/phone.js"></script>
   <script src="/static/replay.js"></script>

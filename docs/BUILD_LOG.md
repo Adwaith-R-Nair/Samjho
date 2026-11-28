@@ -301,6 +301,19 @@ From rehearsing the demo video's exact lines through the app:
 2. The goodbye always said "Your questions will reach the lender", even when she had none. It now says so only when
    questions were passed to the lender.
 
+### Commit 18: a new face, phase 1: the thumbprint becomes a voice
+The interface is being rebuilt in phases. Three static directions (a loan paper, voice as an editorial transcript, an
+Indian Railways station board) were built as mockups and rejected by the builder as "okayish". Two immersive ones
+followed; he chose "the thumbprint becomes a voice" with one effect from the other ("spoken into being": numbers
+assembling out of the voice). Design work followed the Impeccable design skill (pbakaus/impeccable).
+
+Phase 1 replaces the landing: an ink-drop intro; a WebGL2 shader of a living fingerprint (`web/js/voicefield.js`,
+raw WebGL, no library); a four-chamber scroll story (the thumbprint, "pseudo consent" with Rs 50,000 counting down to
+Rs 48,410, "she says it back" with a voice note in an AI stand-in voice, and the ridges unwinding into sound waves);
+then the real start options with their real reasons from /api/status. Smooth scrolling and choreography use GSAP
+3.13.0 (ScrollTrigger, SplitText) and Lenis 1.3.11, pinned on jsDelivr. The session view keeps its old layout with
+the new colours until phase 2. A typed session still runs to a sealed record at 1440 px and 360 px.
+
 ### In progress
 - Hosted live link on Railway.
 - Consented real test sessions (the replay feature is ready for them).

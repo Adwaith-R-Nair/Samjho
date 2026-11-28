@@ -28,8 +28,13 @@
       '<strong class="voice-rec" hidden style="color: var(--red)">Recording for a demo replay. </strong>' +
       '<span class="voice-text muted"></span> <button type="button" class="voice-end">End</button>';
     statusEl.querySelector(".voice-end").onclick = () => stop("Session ended.");
-    const tiles = document.getElementById("tiles");
-    tiles.parentNode.insertBefore(statusEl, tiles.nextSibling);
+    // Shown in the session view, above the conversation.
+    const host = document.getElementById("sessionStatus");
+    if (host) host.appendChild(statusEl);
+    else {
+      const tiles = document.getElementById("tiles");
+      tiles.parentNode.insertBefore(statusEl, tiles.nextSibling);
+    }
     return statusEl;
   }
 
@@ -143,7 +148,7 @@
       if (done) {
         if (!refused) status("Session complete.", false);
       } else {
-        status("Disconnected. Click the tile to start again.", false);
+        status("Disconnected. Press New session to start again.", false);
       }
     };
     ws.onerror = () => status("Could not reach the voice server.", false);
@@ -177,5 +182,5 @@
     if (message) status(message, false);
   }
 
-  window.samjhoVoice = { start, stop };
+  window.samjhoVoice = { start, stop, active: () => ws !== null };
 })();

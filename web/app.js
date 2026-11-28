@@ -1,4 +1,5 @@
-// Samjho UI. One screen: start a session one of four ways, see each fact turn green or red as she speaks.
+// Samjho UI. Two views: the landing (the story and the four start options) and the session (transcript, five
+// facts turning green or red as she speaks, the sealed record). Visuals live in web/js/landing.js.
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = {
@@ -37,8 +38,24 @@ function bubble(who, main, sub) {
   div.innerHTML = `<div class="main"></div>${sub ? '<div class="sub"></div>' : ""}`;
   div.querySelector(".main").textContent = main;
   if (sub) div.querySelector(".sub").textContent = sub;
-  $("transcript").appendChild(div);
-  div.scrollIntoView({ block: "end", behavior: "smooth" });
+  const t = $("transcript");
+  t.appendChild(div);
+  // Scroll the conversation, not the page, so the facts and record stay where they are.
+  t.scrollTo({ top: t.scrollHeight, behavior: "smooth" });
+}
+
+// The two views. The landing story and the print's position follow in web/js/landing.js (when it loaded).
+function showView(view, opts = {}) {
+  if (document.body.dataset.view === view && !opts.to) return;
+  document.body.dataset.view = view;
+  $("live").hidden = view !== "live";
+  window.samjhoStage?.onView(view, opts);
+  if (view === "live") $("liveTitle").focus({ preventScroll: true });
+}
+
+function setLiveTitle(mode) {
+  const titles = { browser: "Talking in the browser", phone: "Phone call", text: "Typing", replay: "Replay" };
+  $("liveTitle").textContent = titles[mode] || "Session";
 }
 
 function note(text, kind = "") {
@@ -161,6 +178,16 @@ async function loadStatus() {
     : "All features available.";
 }
 
+// Pressing any tile other than the phone closes the phone form and clears an old call's status line.
+document.getElementById("tiles").addEventListener("click", (e) => {
+  const tile = e.target.closest(".tile");
+  if (!tile || tile.dataset.mode === "phone") return;
+  $("phoneForm").hidden = true;
+  $("callStatus").hidden = true;
+  setLiveTitle(tile.dataset.mode);
+  showView("live");
+});
+
 document.querySelector('.tile[data-mode="text"]').addEventListener("click", () => startText().catch((e) => note(e.message, "case")));
 
 // Browser voice (web/voice.js): the same events arrive over a WebSocket and go through handleEvent.
@@ -182,6 +209,28 @@ window.samjhoReset = () => {
   $("hint").hidden = false;
 };
 document.querySelector('.tile[data-mode="phone"]').addEventListener("click", () => window.samjhoPhone.open());
+// Once the call is placed, the session view follows it.
+window.samjhoShowSession = (mode) => {
+  setLiveTitle(mode);
+  showView("live");
+};
+
+// Leaving the session (New session, or the Samjho mark) ends a browser voice session and stops a replay,
+// so the mic is never left open behind the landing. A phone call carries on; its phone hangs up on its own.
+function leaveSession(to) {
+  if (document.body.dataset.view === "live") {
+    if (window.samjhoVoice?.active()) window.samjhoVoice.stop("Session ended.");
+    window.samjhoReplay?.stop();
+  }
+  showView("landing", { to });
+}
+$("newSession").addEventListener("click", () => leaveSession("start"));
+document.querySelectorAll('[data-go="landing"]').forEach((a) =>
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    leaveSession("top");
+  }),
+);
 
 // Replay of a recorded consented session (web/replay.js): its events go through handleEvent in time with its audio.
 document.querySelector('.tile[data-mode="replay"]').addEventListener("click", () =>

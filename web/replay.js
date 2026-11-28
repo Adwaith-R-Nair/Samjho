@@ -31,8 +31,13 @@
     audio.addEventListener("seeked", () => {
       if (events.length) rerender(audio.currentTime);
     });
-    const tiles = document.getElementById("tiles");
-    tiles.parentNode.insertBefore(box, tiles.nextSibling);
+    // Shown in the session view, above the conversation.
+    const host = document.getElementById("sessionStatus");
+    if (host) host.appendChild(box);
+    else {
+      const tiles = document.getElementById("tiles");
+      tiles.parentNode.insertBefore(box, tiles.nextSibling);
+    }
     return box;
   }
 
