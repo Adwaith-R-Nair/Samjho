@@ -37,7 +37,10 @@ flowchart LR
         core["Session state machine + grader<br/>app/flow.py, app/grade.py"]
         answer["Question answering<br/>app/answer.py"]
         ledger["Ledger and record<br/>app/record.py"]
+        rec["Recording and replay<br/>app/recording.py"]
     end
+
+    store[("replays/ folder<br/>consented sessions only")]
 
     sarvam[("Sarvam<br/>speech-to-text, text-to-speech")]
     gemini[("Gemini<br/>answers questions only")]
@@ -55,12 +58,16 @@ flowchart LR
     core --> answer
     answer -. "optional, fenced" .-> gemini
     core --> ledger
-    phone <-. "built, live call pending" .-> twilio
-    borrower -. "phone call" .-> twilio
+    voice -. "only with consent" .-> rec
+    rec --> store
+    server <--> rec
+    phone <--> twilio
+    borrower -- "phone call" --> twilio
     ledger -. "record JSON (download today; lender routing Planned)" .-> lender
 ```
 
-Solid lines are built and exercised. Dotted lines are optional, pending a live run, or planned.
+Solid lines are built and exercised. Dotted lines are optional or planned. The phone path ran on two real calls
+on 28 Nov.
 
 ## 3. Components
 
@@ -68,8 +75,9 @@ Solid lines are built and exercised. Dotted lines are optional, pending a live r
 |---|---|---|---|
 | Web UI | `web/index.html`, `web/app.js`, `web/style.css` | One screen: four start tiles, language choice, transcript with English gloss, five fact chips, case and latency notes, record card with JSON download. Every channel renders through one `handleEvent()` | Built |
 | Browser voice client | `web/voice.js`, `web/mic-worklet.js` | AudioWorklet captures the mic at 16 kHz PCM16 in 20 ms chunks; plays returned audio gaplessly; sends silence while playing and for 0.3 s after | Built |
-| Phone client | `web/phone.js` | Form for an Indian mobile number and consent; `POST /api/call`; follows the call on `/ws/watch` | Built, live call pending |
-| FastAPI server | `app/main.py` | UI and static files, `/healthz`, `/api/status`, typing API, `/ws/browser`, `/api/call`, `/ws/twilio`, `/ws/watch`; typing sessions in memory (30-minute idle expiry, at most 200) | Built |
+| Phone client | `web/phone.js` | Form for an Indian mobile number and consent; `POST /api/call` (with `record` when the replay consent box is ticked); follows the call on `/ws/watch` | Built |
+| Replay client | `web/replay.js` | Lists replays, plays one's audio and feeds its saved events to `handleEvent()` at their recorded times under a REPLAY badge; seeking re-renders; starting any other tile stops it | Built |
+| FastAPI server | `app/main.py` | UI and static files, `/healthz`, `/api/status`, typing API, `/ws/browser`, `/api/call`, `/ws/twilio`, `/ws/watch`, `/api/replays`; typing sessions in memory (30-minute idle expiry, at most 200) | Built |
 | Settings | `app/config.py` | Optional keys from the environment or `.env`; reports which features are ready and why not, never the key values | Built |
 | Session state machine | `app/flow.py` | consent, explain, teachback, check, private, final_consent, done. Emits events; writes every step to the ledger | Built |
 | Question answering | `app/answer.py` | Fixed intents, then fenced Gemini, then "noted for the lender" | Built |
@@ -77,11 +85,11 @@ Solid lines are built and exercised. Dotted lines are optional, pending a live r
 | Number parser | `app/hi_numbers.py` | Hindi, Hinglish, Devanagari, English and digit numbers to values with confusion flags and alternatives; schedule, count and duration. Pure functions | Built |
 | Spoken lines | `app/lines.py`, `app/numwords.py` | Every line in Hindi (Devanagari, amounts as words) and English, built from the loan | Built |
 | Ledger and record | `app/record.py`, `Session.record()`, `scripts/verify_record.py` | Append-only hash-chained log; record with per-fact results, first-answer and after-Samjho counts, cases, consent and SHA-256 seal | Built |
-| Voice pipeline | `app/voice.py`, `app/browser_serializer.py` | One Pipecat 1.17 pipeline, two profiles: browser (16 kHz, half duplex) and phone (8 kHz, barge-in) | Built (browser); built, live call pending (phone) |
-| Call desk and watch hub | `app/phone.py` | Checks, places the Twilio call with a one-time stream token, runs the phone session, publishes events to the browser watching it | Built, live call pending |
+| Voice pipeline | `app/voice.py`, `app/browser_serializer.py` | One Pipecat 1.17 pipeline, two profiles: browser (16 kHz, half duplex) and phone (8 kHz, barge-in). With consent, an audio buffer after the output records both voices | Built (phone proven on two real calls) |
+| Call desk and watch hub | `app/phone.py` | Checks, places the Twilio call with a one-time stream token, runs the phone session, publishes events to the browser watching it | Built (proven on two real calls) |
 | Call limits | `app/limits.py` | Per-number, per-IP and global limits, salted hashes, in memory | Built |
 | Evaluation | `eval/run_eval.py`, `eval/synthetic.jsonl` | Grades a fixed phrase set; reports accuracy and false passes | Built |
-| Replay | `replays/` | Re-emit a recorded, consented session's events, labelled REPLAY | Planned (step 7) |
+| Recording and replay | `app/recording.py`, `replays/` | With consent, collects every UI event with its time and the mixed audio, masks phone numbers, writes one folder per session; lists and serves replays by checked id | Built. No consented real session saved yet, so the replay tile stays disabled |
 
 ## 4. Data flow for one turn
 
@@ -134,7 +142,7 @@ flowchart LR
 5. All `say` lines of one reply are spoken as one utterance; every event goes to the browser as JSON on the same
    socket; a `latency` event follows each turn.
 
-### Phone call (built, live call pending)
+### Phone call (proven on two real calls)
 
 ```mermaid
 sequenceDiagram
@@ -145,7 +153,7 @@ sequenceDiagram
     participant P as Phone pipeline (voice.py)
     participant H as WatchHub
 
-    B->>API: POST /api/call {phone, consent, lang, k}
+    B->>API: POST /api/call {phone, consent, lang, k, record}
     API->>D: place(): kill switch, keys, access code, consent, number, limits
     D->>T: calls.create(TwiML Stream to /ws/twilio with one-time token, 480 s limit)
     D-->>B: {watch_id}
@@ -162,35 +170,73 @@ may interrupt, but only with two or more words while Samjho speaks; while a repl
 she is muted and her audio is blanked before speech-to-text, so the numbers are heard in full. UI events go to the
 watch hub, never to Twilio.
 
+### Recording and replay
+
+```mermaid
+sequenceDiagram
+    participant UI as Web UI (voice.js, phone.js)
+    participant API as FastAPI (main.py)
+    participant V as Voice pipeline (voice.py)
+    participant R as Recorder (recording.py)
+    participant F as replays folder
+    participant RP as Replay client (replay.js)
+
+    UI->>API: WS /ws/browser?record=1, or POST /api/call with record true
+    API->>V: run_browser_session or run_phone_session, record=True
+    V->>V: Session(recording=True), the intro says it is being recorded
+    V->>R: every UI event (timed), mixed audio from AudioBufferProcessor
+    V->>R: save() when the session ends
+    R->>F: events.jsonl, audio.wav, manifest.json in one folder
+    RP->>API: GET /api/replays, then /api/replays/id/events and /audio
+    API->>R: list_replays(), read_events(), replay_file() with id and path checked
+    RP->>UI: handleEvent() for each event when the audio reaches its time
+```
+
+1. Recording is off unless the person ticks "Save this session as a demo replay. The person speaking agrees to be
+   recorded and shown." It applies to the browser voice and the phone; typing is never recorded.
+2. Samjho's first line then says the conversation is being recorded with her permission and that she can stop it;
+   the screen shows "Recording for a demo replay"; `session_start` in the ledger carries `recording: true`.
+3. Events are kept with `t`, seconds since the session started (the clock restarts when the audio recording
+   starts, so events line up with the audio), and anything that looks like an Indian
+   mobile number is masked to its last four digits before it is kept.
+4. At the end, the folder `replays/<UTC date>_<session id>/` is written with `events.jsonl` (one event per line),
+   `audio.wav` (both voices mixed to mono, 16 kHz browser, 8 kHz phone) and `manifest.json` (session id, language,
+   channel, start time, duration, consent text, spoken consent, facts right first and after Samjho, seal). A
+   session in which she never spoke is not saved.
+5. The replay tile is enabled only when a `manifest.json` exists. The replay client plays the audio and fires each
+   event when the audio passes its `t`, under "REPLAY of a real consented session, recorded <date>. Not live."
+
 ## 5. Deployment
 
 | Setting | Where | How | Status |
 |---|---|---|---|
 | Local | Any machine with Docker | `docker compose up --build`, open http://localhost:7860. Every key is optional (`${VAR:-}` in `docker-compose.yml`) | Built |
 | Local without Docker | Python 3.11 | `uvicorn app.main:app --port 7860` (README) | Built |
-| Image | `Dockerfile` | `python:3.11-slim-bookworm`, installs `requirements.txt`, copies `app/` and `web/`, honours `$PORT` (default 7860), Python-based `HEALTHCHECK` on `/healthz` | Built |
+| Image | `Dockerfile` | `python:3.11-slim-bookworm`, installs `requirements.txt`, copies `app/`, `web/` and `replays/`, honours `$PORT` (default 7860), Python-based `HEALTHCHECK` on `/healthz` | Built |
 | CI | `.github/workflows/ci.yml` | Job 1: `pytest`. Job 2: fresh clone, `docker compose up --build` with no keys, wait for `/healthz`, check the main screen and "SARVAM_API_KEY not set" | Built |
 | Live link | Railway trial | Same Dockerfile, keys as Railway variables, `PUBLIC_BASE_URL` set to the Railway domain | Planned (step 8), not yet deployed |
-| Development tunnel | Cloudflare tunnel from the laptop | Gives Twilio a public https address during development (`scripts/call_smoke.py` docstring); not for judging, because a laptop cannot be trusted to stay up | Development only |
+| Development tunnel | Cloudflare tunnel from the laptop | Gives Twilio a public https address during development (`scripts/call_smoke.py` docstring); the two real calls on 28 Nov ran through a quick tunnel. Not for judging, because a laptop cannot be trusted to stay up | Development only |
 
 One uvicorn worker: typing sessions, live voice sessions, pending calls, call limits and the watch hub are all
-in process memory, and a restart clears them.
+in process memory, and a restart clears them. Consented replays are the only thing written to disk, under
+`replays/` (or `SAMJHO_REPLAY_DIR`). The `Dockerfile` copies `replays/` into the image, so committed replays play on the hosted link; a session recorded
+inside a hosted container is lost on redeploy unless it is committed.
 
 ## 6. Security and privacy
 
 | Area | What the code does |
 |---|---|
 | Keys | Read from environment or `.env` (gitignored, excluded by `.dockerignore`). `/api/status` names a missing key, never a value (`test_status_never_echoes_a_key`). Tests never call Gemini (`tests/conftest.py`) |
-| Personal data | Synthetic sample loan only. No Aadhaar or account number is asked for. Nothing is written to disk |
+| Personal data | Synthetic sample loan only. No Aadhaar or account number is asked for. Nothing is written to disk except a consented replay |
 | Phone numbers | Only `+91[6-9]` plus 9 digits accepted. Kept only as salted HMAC hashes (salt random per process) for the limits; logged masked (`+91XXXXXX1234`) |
 | Data sent to providers | Voice audio to Sarvam; call audio through Twilio; when a Gemini key is set, the text of a question not covered by the fixed answers, with the loan's facts, to Google |
-| Recordings | None made. `.gitignore` excludes `*.wav`, `*.mp3`, `recordings/`. Replays only from consenting testers (Planned) |
+| Recordings | Only when the consent box is ticked, and said aloud at the start of the session. Saved events have phone numbers masked to the last four digits (a hex seal or an id is not masked); no keys are part of any event. The manifest keeps the exact consent text and her spoken consent; deleting the folder withdraws it. `.gitignore` excludes `*.wav`, `*.mp3`, `recordings/` and `scratch/`, except `replays/**/*.wav`, which are published on purpose. Synthetic smoke-test replays go under `scratch/` |
 | Calls | Consent checkbox required; optional `JUDGE_TOKEN` access code (constant-time compare); `CALLS_ENABLED` read on every request; one-time stream token, valid 120 s and bound to the call SID, so nobody else can attach to a call; calls end after 480 s |
-| Abuse limits | Per number 1 call per 30 min and 3 per day; per IP 3 per hour; 2 calls at once and 40 per day overall; owner numbers skip only the per-number and per-IP limits; at most 4 live browser voice sessions, each up to 5 minutes |
+| Abuse limits | Per number 1 call per 30 min and 3 per day; per IP 3 per hour; 2 calls at once and 40 per day overall; owner numbers skip only the per-number and per-IP limits; at most 4 live browser voice sessions, each up to 8 minutes |
 | Client IP | Taken from the socket; `CF-Connecting-IP` or `X-Forwarded-For` are trusted only when the request comes from loopback (a local tunnel) |
 | Input handling | Typed text truncated to 500 characters. The UI inserts user text with `textContent` or an HTML escape |
 | Integrity | Hash-chained ledger; tampering breaks the seal; a browser-written copy still verifies |
-| API surface | FastAPI's `/docs` and `/redoc` are turned off |
+| API surface | FastAPI's `/docs` and `/redoc` are turned off. Replay ids must match `^[A-Za-z0-9_-]{1,80}$`, only `events.jsonl`, `audio.wav` and `manifest.json` can be served, and the resolved path must sit directly inside the replay folder |
 
 The private extra-money answer is written to the record as a `HOLD_REVIEW` case and shown on the panel. Routing it
 to a lender's grievance officer (and not the field officer) needs lender integration: Planned after Round 2.
@@ -209,7 +255,11 @@ to a lender's grievance officer (and not the field officer) needs lender integra
 | Wrong or reused stream token | `/ws/twilio` closes with code 1008 |
 | Unknown watch id | `/ws/watch` sends `WATCH_UNKNOWN` and closes |
 | Too many voice sessions | `/ws/browser` sends a `BUSY` notice and closes |
-| Browser leaves, or 5 minutes pass | The session's pipeline is cancelled |
+| Browser leaves, or 8 minutes pass | The session's pipeline is cancelled; a consented recording is still saved |
+| Recording cannot be saved | Logged; the session and its record are unaffected |
+| Unknown or unsafe replay id | `/api/replays/{id}/events` or `/audio` returns 404 |
+| No consented replay saved yet | Replay tile disabled with "No recorded test session added yet"; refused calls say "Typing still works." instead of offering replay |
+| Latency clock started before the turn | The reading is dropped instead of shown (`voice.plausible_latency`) |
 | Number word unclear | The parser skips unreadable words and flags confusion pairs. `judge()` returns amber "unclear word, confirm" only if the other reading would change the status, and she is asked again. "pachaas hazaar" for cash in hand is red: 50,000 and 55,000 are both wrong |
 | Fact still wrong after 2 repairs | UNCLEAR, CALLBACK case, flow continues; the loan is never blocked |
 | Unrecognised yes or no | "Sorry, I did not catch that", same state |

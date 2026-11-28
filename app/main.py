@@ -14,7 +14,6 @@ from app.config import load_settings
 from app.flow import Session
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
-REPLAY_DIR = Path(__file__).resolve().parent.parent / "replays"
 SESSION_TTL = 30 * 60
 MAX_SESSIONS = 200
 

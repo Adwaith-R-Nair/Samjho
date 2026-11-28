@@ -11,6 +11,8 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY web ./web
+# Consented demo replays ship with the image so the hosted link can play them.
+COPY replays ./replays
 
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -1,9 +1,8 @@
 # Samjho: roadmap
 
-Status words: **Done** (committed and tested), **Built, live call pending** (committed, tested and proven in a
-simulation, not yet on a real phone network), **Partly done**, **Planned** (not built). The build history with
+Status words: **Done** (committed and tested), **Partly done**, **Planned** (not built). The build history with
 what broke and how it was fixed is in [BUILD_LOG.md](BUILD_LOG.md). Requirement IDs (FR-n) refer to
-[PRD.md](PRD.md). Test suite at the time of writing: 630 tests, all passing.
+[PRD.md](PRD.md). Test suite at the time of writing: 670 tests, all passing.
 
 ## Round 2: 27 to 30 Nov 2026
 
@@ -16,7 +15,7 @@ Submission deadline: Mon 30 Nov, 11:59 pm IST. Each step is one commit after its
 | Capture the Round 2 brief and rules | Done | Summary in BUILD_LOG.md |
 | Choose what to build: extend Round 1 as "Her voice, not her thumb" | Done | Reasons and honest limits in BUILD_LOG.md |
 | Sarvam and Gemini keys created and tested | Done | |
-| Twilio paid account (trial accounts cannot call India) | Planned | Waits on an international-enabled card; the only thing between the phone code and a live call |
+| Twilio paid account (trial accounts cannot call India) | Done (28 Nov) | Account upgraded, Individual compliance profile approved, a US local number bought (Voice only); India enabled in Voice Geo Permissions (BUILD_LOG commit 13) |
 | Hosting for the live link | Planned | Railway trial (not yet deployed); a Cloudflare tunnel from the laptop for development only |
 
 ### Build steps
@@ -28,10 +27,10 @@ Submission deadline: Mon 30 Nov, 11:59 pm IST. Each step is one commit after its
 | 3 | Grader and conversation state machine end to end by typing: catch, repair, recheck, private question, consent, seal (FR-1 to FR-14) | Done (commit 4, six bugs found and fixed; commit 5 adds first-answer vs after-Samjho counts) | `app/flow.py`, `app/grade.py`, `app/lines.py`, `app/loan.py`, `app/numwords.py`, `app/record.py`, `tests/test_flow.py`, `tests/test_source_hygiene.py` |
 | 4 | Browser voice: mic over WebSocket, Sarvam speech-to-text and text-to-speech, half duplex, latency per turn (FR-17) | Done (commit 7, latency measured) | `app/voice.py`, `app/browser_serializer.py`, `web/voice.js`, `web/mic-worklet.js`, `tests/test_voice.py`, `scripts/voice_smoke.py` |
 | 5 | Gemini help and English mode | Partly done. Gemini answers her questions, fenced to the loan's numbers (commit 9, `app/answer.py`). English mode works by typing and voice. Gemini help with mapping words to facts (FR-18): Planned; grading stays rules-only | `app/answer.py`, `tests/test_flow.py` |
-| 6 | Twilio phone channel with call limits and kill switch (FR-19, FR-20); first real call; measure latency | Built, live call pending (commit 10). Proven end to end in a simulated call with live Sarvam speech; replies in 1.03 to 1.36 s. Not yet proven: Twilio hang-up, real network audio, the "International Call" label, barge-in feel on a real line | `app/phone.py`, `app/limits.py`, `web/phone.js`, `tests/test_phone.py`, `scripts/call_smoke.py --simulate` |
-| 7 | Unaided test sessions with real people on the synthetic loan, recorded only with consent; replay tile (FR-21); field phrases into the eval | Planned. So far only the builder's own real-mic test (commit 9), which led to the question answering | `replays/` (not present yet) |
-| 8 | Railway deploy; smoke test the live link from another network | Planned | |
-| 9 | Eval report, README, deck text, 3-minute video, one-page record summary. Freeze at 18:00 Mon 30 Nov, submit by 21:00 | Partly done: eval harness (commit 6) and a README that only claims what runs, plus `scripts/verify_record.py` (commit 8). Eval report with field phrases, deck, video and summary page: Planned | `eval/run_eval.py`, `eval/synthetic.jsonl`, `tests/test_eval.py`, `README.md` |
+| 6 | Twilio phone channel with call limits and kill switch (FR-19, FR-20); first real call; measure latency | Done. Built in commit 10 and proven in a simulated call; two real calls on 28 Nov (commits 13 and 14): median reply 1.34 s over 22 turns, the second call a full session to the sealed record. Five problems the first call showed were fixed with its exact transcripts. Not yet proven: hang-up through Twilio's API mid-session | `app/phone.py`, `app/limits.py`, `web/phone.js`, `tests/test_phone.py`, `scripts/call_smoke.py` (live or `--simulate`) |
+| 7 | Unaided test sessions with real people on the synthetic loan, recorded only with consent; replay tile (FR-21); field phrases into the eval | Partly done. Consented recording and synced replay are built (commit 12): consent box, spoken recording notice, masked phone numbers, path-checked replay API. Planned: consented real user sessions (so far only the builder's own real-mic test and his two real calls, none saved as a replay) and field phrases into the eval | `app/recording.py`, `web/replay.js`, `replays/README.md`, `tests/test_replay.py` |
+| 8 | Railway deploy (hosted live link); smoke test it from another network | Planned. The real calls ran through a Cloudflare quick tunnel to the laptop | |
+| 9 | Eval report, README, deck text, 3-minute video, one-page record summary. Freeze at 18:00 Mon 30 Nov, submit by 21:00 | Partly done: eval harness (commit 6) and a README that only claims what runs, plus `scripts/verify_record.py` (commit 8). README now carries the real-call numbers. Eval report with field phrases, deck, 3-minute video and summary page: Planned | `eval/run_eval.py`, `eval/synthetic.jsonl`, `tests/test_eval.py`, `README.md` |
 
 Also done along the way: design docs (commits 2 and 5).
 

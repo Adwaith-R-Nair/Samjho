@@ -71,7 +71,7 @@ https://assets.equifax.com/marketing/india/assets/mfi-pulse-vol-xxviii-sept-2026
 2. Every correctness decision made by deterministic code with stated tolerances.
 3. Starts with `docker compose up` and no keys; features that need a key say which key is not set.
 4. The same flow by typing (built), by voice in the browser (built) and on a real phone call (built and proven
-   in a simulated call; the first live call is pending a Twilio account).
+   on two real calls on 28 Nov, one of them a full session to the sealed record).
 5. Hindi first, with an English mode so non-Hindi users can finish the flow.
 
 ### Non-goals
@@ -106,18 +106,16 @@ The five facts on the synthetic sample loan (`app/loan.py`):
 
 ## 5. Functional requirements
 
-Status: **Built** means present in the code and covered by passing tests. **Built, live call pending** means the
-code passes its tests and a simulated end-to-end call, but has not yet run on a real phone network.
-**Planned** names the roadmap step.
+Status: **Built** means present in the code and covered by passing tests. **Planned** names the roadmap step.
 
 | ID | Requirement | Status | Where |
 |---|---|---|---|
 | FR-1 | Ask permission to start; "no" ends politely and still produces a record with consent `not_started` | Built | `app/flow.py` `_on_consent` |
 | FR-2 | Explain the loan in 4 short lines built from the loan data, amounts spoken as Hindi words | Built | `app/lines.py` `explain`, `app/numwords.py` |
-| FR-3 | Answer her questions during the explanation: first from fixed answers written by us (explain again simply, how long, cash in hand, total, instalment, "what else", fee, insurance, interest, missed payment); else, if a Gemini key is set, from Gemini fenced to the loan's own facts and numbers; else note the question for the lender. After 3 questions, move on to the teach-back | Built | `app/answer.py`, `app/lines.py` `faq`, `app/flow.py` `_on_explain` |
+| FR-3 | Answer her questions during the explanation: first from fixed answers written by us (explain again simply, how long, cash in hand, total, instalment including "kitne rupaye jama karna hai", "what else", fee, insurance, interest, missed payment); else, if a Gemini key is set, from Gemini fenced to the loan's own facts and numbers; else note the question for the lender. After 3 questions, move on to the teach-back | Built | `app/answer.py`, `app/lines.py` `faq`, `app/flow.py` `_on_explain` |
 | FR-4 | Teach-back prompt asking her to explain the loan in her own words | Built | `app/lines.py` `teachback` |
 | FR-5 | Parse Hindi, Hinglish, Devanagari, English and digit numbers and payment schedules; known confusion pairs (pachaas/pachpan, saath/saat, sattar/satrah) are flagged with the other reading; unclear words are skipped, never guessed | Built (544 test cases) | `app/hi_numbers.py` |
-| FR-6 | Assign each spoken number to a fact using cue words in the same clause; a bare number answers the fact just asked; counts of weeks are not read as rupees | Built | `app/grade.py` `assign` |
+| FR-6 | Assign each spoken number to a fact using cue words in the same clause; a bare number answers the fact just asked, and so does a single number that is closer to the asked fact than to the one its loose cue word points at ("56,000 kisht" asked for the total); counts of weeks are not read as rupees; an amount cut at a pause by speech-to-text ("1000. 95") is joined back into one; a number placed only by its size gives way to a later number with her own cue word for that fact | Built (cases from the two real calls in the tests) | `app/grade.py` `assign`, `_join_split_amounts` |
 | FR-7 | Grade each fact green, amber, red or grey against the loan with fixed tolerances, keeping her exact words as evidence | Built | `app/grade.py` `judge`, `app/loan.py` `TOLERANCE` |
 | FR-8 | Re-explain only facts that are not green, quoting her own words, then recheck with a different question; at most 2 rounds per fact | Built | `app/flow.py` `_next`, `app/lines.py` `repair`, `RECHECK` |
 | FR-9 | After 2 rounds, mark the fact UNCLEAR, open a CALLBACK case and continue; never block | Built | `app/flow.py` `_next` |
@@ -130,9 +128,9 @@ code passes its tests and a simulated end-to-end call, but has not yet run on a 
 | FR-16 | `/api/status` names each missing key and never returns a key's value | Built | `app/config.py`, `app/main.py` |
 | FR-17 | Browser voice: microphone over one WebSocket, Sarvam speech-to-text and text-to-speech, half duplex, latency per turn on the panel | Built | `web/voice.js`, `web/mic-worklet.js`, `app/voice.py`, `app/browser_serializer.py` |
 | FR-18 | LLM help with mapping her words to facts (Gemini suggests, the grader still judges), with a rules-only fallback | Planned (step 5). Grading today is rules-only | not present |
-| FR-19 | Real phone call to an Indian mobile ("we call you"), 8 kHz, barge-in, amounts read without interruption, live panel in the browser that asked for the call | Built, live call pending | `app/phone.py`, `app/voice.py`, `web/phone.js`, `/api/call`, `/ws/twilio`, `/ws/watch` |
-| FR-20 | Protection for a public link: consent checkbox, Indian mobiles only, per-number, per-IP and global limits, kill switch, optional access code, one-time stream token, 5-minute calls | Built, live call pending | `app/limits.py`, `app/phone.py` |
-| FR-21 | Replay of a real, consented test session, labelled REPLAY | Planned (step 7). Until a file exists under `replays/`, `/api/status` reports "No recorded test session added yet" and the tile stays disabled | `replays/` |
+| FR-19 | Real phone call to an Indian mobile ("we call you"), 8 kHz, barge-in, amounts read without interruption, live panel in the browser that asked for the call | Built and proven on two real calls (28 Nov, a US Twilio number to an Indian mobile through a tunnel to a laptop); the second ran a full session to the sealed record. Not yet proven: hang-up through Twilio's API mid-session | `app/phone.py`, `app/voice.py`, `web/phone.js`, `/api/call`, `/ws/twilio`, `/ws/watch` |
+| FR-20 | Protection for a public link: consent checkbox, Indian mobiles only, per-number, per-IP and global limits, kill switch, optional access code, one-time stream token, 8-minute calls (`CALL_TIME_LIMIT = 480`) | Built (used on the two real calls) | `app/limits.py`, `app/phone.py` |
+| FR-21 | Record a browser or phone session only when the consent box ("Save this session as a demo replay. The person speaking agrees to be recorded and shown.") is ticked; Samjho then says aloud at the start that the conversation is being recorded with her permission and that she can stop it, and the screen shows "Recording for a demo replay"; phone numbers in saved events are masked to their last four digits. Replay plays the audio and feeds the saved events to the panel at their recorded times, under a "REPLAY of a real consented session" badge | Built. No consented real session saved yet, so `/api/status` reports "No recorded test session added yet" and the tile stays disabled; recording real sessions: Planned (step 7) | `app/recording.py`, `lines.intro(recording=True)`, `web/replay.js`, `/api/replays`, `replays/README.md` |
 | FR-22 | Evaluation harness that counts false passes over a phrase set | Built: 53 synthetic phrases, 71 checks, 0 false passes; field phrases Planned (step 7) | `eval/run_eval.py`, `eval/synthetic.jsonl` |
 | FR-23 | Printable one-page summary of the record | Planned (step 9) | not present |
 
@@ -140,12 +138,12 @@ code passes its tests and a simulated end-to-end call, but has not yet run on a 
 
 | ID | Requirement | Status |
 |---|---|---|
-| NFR-1 Latency | **Target, not a measurement:** P95 turn latency (end of her speech to first reply audio) under 2.0 s in the browser and under 2.5 s on the phone. **Measured so far** (single runs, not a P95; BUILD_LOG commits 7, 9 and 10): browser with synthetic speech about 1.05 s for yes/no turns and 1.3 to 1.37 s for number turns (0.6 or 0.9 s of that is the deliberate wait for her to finish); first real-mic test 1.07 to 1.58 s; simulated phone call 1.03 to 1.36 s. Questions answered by Gemini can take up to 3 s | Target set; P95 not yet computed |
+| NFR-1 Latency | **Target, not a measurement:** P95 turn latency (end of her speech to first reply audio) under 2.0 s in the browser and under 2.5 s on the phone. **Measured so far** (single runs, not a P95; BUILD_LOG commits 7, 9 and 10): browser with synthetic speech about 1.05 s for yes/no turns and 1.3 to 1.37 s for number turns (0.6 or 0.9 s of that is the deliberate wait for her to finish); first real-mic test 1.07 to 1.58 s; simulated phone call 1.03 to 1.36 s; two real phone calls (BUILD_LOG commits 13 and 14) a median 1.34 s over 22 turns, plus one Gemini question at 2.54 s. Readings whose clock started before the turn they time are dropped (`voice.plausible_latency`). Questions answered by Gemini can take up to 3 s | Target set; P95 not yet computed |
 | NFR-2 No-keys start | App boots and shows its main screen with no keys; CI checks this from a fresh clone | Built (`.github/workflows/ci.yml`) |
 | NFR-3 Fail closed | A number whose other likely reading would change the verdict is never passed: it becomes amber and is asked again | Built (`app/grade.py` `judge`) |
 | NFR-4 Never blocks the loan | A comprehension gap ends in UNCLEAR plus CALLBACK, never in a refusal. Only her own report of an extra-money demand creates a HOLD for human review | Built |
 | NFR-5 LLM never decides | Green, amber and red come only from `app/grade.py`. Gemini may explain, never judge: it is used only to answer her questions, and every number in its answer must be one of the loan's own numbers or the answer is discarded | Built |
-| NFR-6 Privacy | Sessions live in memory only; no audio, transcript or phone number is written to disk; phone numbers are kept only as salted hashes and logged masked; synthetic loan only; no Aadhaar asked or stored. Data sent to providers: audio to Sarvam (voice), call audio through Twilio (phone), and, when a Gemini key is set, the text of a question not covered by the fixed answers plus the loan's facts to Google | Built |
+| NFR-6 Privacy | Sessions live in memory only; no audio, transcript or phone number is written to disk, except a session the person speaking has consented to save as a demo replay (`replays/<date>_<id>/`, phone numbers masked in its events, withdrawn by deleting the folder); phone numbers are kept only as salted hashes and logged masked; synthetic loan only; no Aadhaar asked or stored. Data sent to providers: audio to Sarvam (voice), call audio through Twilio (phone), and, when a Gemini key is set, the text of a question not covered by the fixed answers plus the loan's facts to Google | Built |
 | NFR-7 Secrets | Keys only from environment or `.env` (gitignored); never echoed by the API (tested) | Built |
 | NFR-8 Tamper evidence | Editing or removing any log entry breaks the seal (tested); a browser-written copy still verifies (tested) | Built |
 | NFR-9 Cost and abuse | Phone calls off unless `CALLS_ENABLED=true` (read on every request); call limits as in FR-20; at most 4 live browser voice sessions | Built |
@@ -186,7 +184,7 @@ Samjho uses Sarvam's speech models; it does not compete with them on speech.
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| Hindi numbers misheard on phone audio (8 kHz) | Wrong grade | The parser flags confusion pairs; the grader asks again whenever the other reading would change the verdict. Phone tested only in simulation so far |
+| Hindi numbers misheard on phone audio (8 kHz) | Wrong grade | The parser flags confusion pairs; the grader asks again whenever the other reading would change the verdict. Two real calls so far; an amount split at a pause ("1000. 95") is joined back |
 | A wrong answer graded green | Harms the borrower and the claim | Zero-false-pass gate in the eval test; tolerances in one file |
 | Eval set written by us | Says little about real speech | Field phrases from consented sessions go in a separate file with their source marked (step 7) |
 | Testers are not real borrowers on their own loans | Weaker evidence | Synthetic loan by design; results reported as they happened, failures included |
@@ -195,3 +193,4 @@ Samjho uses Sarvam's speech models; it does not compete with them on speech.
 | Indian mobiles label calls from a US number as "International Call" | Borrower may not answer | The UI says so before the call; browser channel is primary; an Indian telephony provider after Round 2 (Planned) |
 | Browser voice cannot be interrupted | Slower conversation | Chosen trade-off against echo without browser echo cancellation; barge-in on the phone |
 | Record mistaken for legal proof | Overclaim | Documented as a tamper-evident session log only, not an e-signature |
+| A replay publishes a real voice | Privacy harm | Recorded only with the consent box ticked, said aloud at the start, masked phone numbers, consent text kept in the manifest; deleting the folder withdraws it (`replays/README.md`) |
